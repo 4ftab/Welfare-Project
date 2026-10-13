@@ -13,15 +13,27 @@ const expensesRoutes = require("./routes/expenses");
 const projectsRoutes = require("./routes/projects");
 const announcementsRoutes = require("./routes/announcements");
 const reportsRoutes = require("./routes/reports");
+const publicRoutes = require("./routes/public");
 
 const app = express();
 
-app.use(cors({
-  origin: [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-    ],
-}));
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.disable("x-powered-by");
+app.use(cors({ origin: allowedOrigins }));
+
+app.use((req, res, next) => {
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer"
+  });
+  next();
+});
 
 app.use(express.json({ limit: "1mb" }));
 
@@ -57,6 +69,7 @@ app.use("/api/expenses", expensesRoutes);
 app.use("/api/projects", projectsRoutes);
 app.use("/api/announcements", announcementsRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/public", publicRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

@@ -4,10 +4,17 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../config/db");
 const { authenticateToken } = require("../middleware/auth");
+const rateLimit = require("../middleware/rateLimit");
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: "Too many attempts. Please wait a few minutes and try again."
+});
 
 const router = express.Router();
 
-router.post("/register", async (req, res) => {
+router.post("/register", loginLimiter, async (req, res) => {
   try {
     const { full_name, email, phone, password } = req.body;
 
@@ -81,7 +88,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -168,6 +175,79 @@ router.get("/me", authenticateToken, async (req, res) => {
     res.status(500).json({
       message: "Could not retrieve your profile."
     });
+  }
+});
+
+router.patch("/me", authenticateToken, async (req, res) => {
+  try {
+    const full_name = String(req.body.full_name || "").trim();
+    const phone = req.body.phone ? String(req.body.phone).trim() : null;
+
+    if (!full_name || full_name.length > 100) {
+      return res.status(400).json({
+        message: "Name is required and must be 100 characters or fewer."
+      });
+    }
+
+    if (phone && phone.length > 25) {
+      return res.status(400).json({ message: "Phone number is too long." });
+    }
+
+    await db.execute(
+      "UPDATE users SET full_name = ?, phone = ? WHERE id = ?",
+      [full_name, phone, req.user.id]
+    );
+
+    res.json({ message: "Profile updated." });
+  } catch (error) {
+    console.error("Update profile error:", error.message);
+    res.status(500).json({ message: "Could not update your profile." });
+  }
+});
+
+router.post("/change-password", authenticateToken, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({
+        message: "Current and new password are required."
+      });
+    }
+
+    if (String(new_password).length < 8) {
+      return res.status(400).json({
+        message: "New password must contain at least 8 characters."
+      });
+    }
+
+    const [users] = await db.execute(
+      "SELECT password_hash FROM users WHERE id = ?",
+      [req.user.id]
+    );
+
+    const valid = await bcrypt.compare(
+      String(current_password),
+      users[0].password_hash
+    );
+
+    if (!valid) {
+      return res.status(401).json({
+        message: "Your current password is incorrect."
+      });
+    }
+
+    const hash = await bcrypt.hash(String(new_password), 12);
+
+    await db.execute("UPDATE users SET password_hash = ? WHERE id = ?", [
+      hash,
+      req.user.id
+    ]);
+
+    res.json({ message: "Password changed successfully." });
+  } catch (error) {
+    console.error("Change password error:", error.message);
+    res.status(500).json({ message: "Could not change your password." });
   }
 });
 

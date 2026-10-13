@@ -121,9 +121,11 @@ router.get("/", async (req, res) => {
     let sql = `
       SELECT e.id, e.project_id, e.title, e.description, e.category,
              e.amount, e.expense_date, e.receipt_reference,
+             p.title AS project_title,
              u.full_name AS recorded_by_name
       FROM expenses e
       JOIN users u ON u.id = e.recorded_by
+      LEFT JOIN projects p ON p.id = e.project_id
     `;
 
     const params = [];
@@ -147,6 +149,28 @@ router.get("/", async (req, res) => {
     res.status(500).json({
       message: "Could not retrieve expenses."
     });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const [result] = await db.execute("DELETE FROM expenses WHERE id = ?", [id]);
+
+    if (!result.affectedRows) {
+      return res.status(404).json({ message: "Expense not found." });
+    }
+
+    await db.execute(
+      "INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)",
+      [req.user.id, "EXPENSE_DELETED", `Expense ID ${id}`]
+    );
+
+    res.json({ message: "Expense deleted." });
+  } catch (error) {
+    console.error("Delete expense error:", error.message);
+    res.status(500).json({ message: "Could not delete expense." });
   }
 });
 
