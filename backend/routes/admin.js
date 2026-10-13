@@ -119,7 +119,7 @@ router.get("/donations", async (req, res) => {
       SELECT d.id AS donation_id, u.id AS user_id,
              u.full_name, u.email, d.amount,
              d.payment_method, d.payment_status,
-             d.transaction_reference, d.project_id,
+             d.transaction_reference, d.project_id, d.payment_channel,
              p.title AS project_title,
              COALESCE(d.donated_at, d.created_at) AS donation_date
       FROM donations d
@@ -202,7 +202,7 @@ router.get("/export/donations.csv", async (req, res) => {
   try {
     const [rows] = await db.execute(
       `SELECT d.id, u.full_name, u.email, d.amount, d.payment_method,
-              d.payment_status, d.transaction_reference,
+              d.payment_status, d.payment_channel, d.transaction_reference,
               p.title AS project,
               COALESCE(d.donated_at, d.created_at) AS donation_date
        FROM donations d
@@ -213,7 +213,7 @@ router.get("/export/donations.csv", async (req, res) => {
 
     const header = [
       "ID", "Donor", "Email", "Amount (PKR)", "Method",
-      "Status", "Reference", "Project", "Date"
+      "Status", "Channel", "Reference", "Project", "Date"
     ];
 
     const lines = [header.map(csvCell).join(",")];
@@ -222,7 +222,7 @@ router.get("/export/donations.csv", async (req, res) => {
       lines.push(
         [
           r.id, r.full_name, r.email, r.amount, r.payment_method,
-          r.payment_status, r.transaction_reference, r.project,
+          r.payment_status, r.payment_channel, r.transaction_reference, r.project,
           r.donation_date ? new Date(r.donation_date).toISOString() : ""
         ].map(csvCell).join(",")
       );

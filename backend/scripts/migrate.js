@@ -44,6 +44,13 @@ async function run() {
     console.log("donations.note: ok");
   }
 
+  if (!(await columnExists("donations", "payment_channel"))) {
+    await db.query("ALTER TABLE donations ADD COLUMN payment_channel VARCHAR(30) NULL");
+    console.log("donations.payment_channel: added");
+  } else {
+    console.log("donations.payment_channel: ok");
+  }
+
   console.log("Migration complete.");
 }
 

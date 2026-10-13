@@ -9,7 +9,9 @@ import {
   api,
   compactMoney,
   currentMonth,
+  CHANNEL_NAMES,
   formatDate,
+  methodLabel,
   money,
   monthLabel,
   pct,
@@ -64,6 +66,7 @@ export default function App() {
 
   const [selectedAmount, setSelectedAmount] = useState("");
   const [donateProject, setDonateProject] = useState("");
+  const [channel, setChannel] = useState("card");
   const [lastPledge, setLastPledge] = useState(null);
 
 
@@ -309,6 +312,7 @@ export default function App() {
           payment_method: "safepay",
           project_id: donateProject ? Number(donateProject) : undefined,
           note: form.get("note") || undefined,
+          payment_channel: channel,
         }),
       });
       if (result.checkout_url) {
@@ -325,6 +329,7 @@ export default function App() {
       });
       setSelectedAmount("");
       setDonateProject("");
+      setChannel("card");
       event.currentTarget.reset();
       await loadDashboard(token);
     } catch (e) {
@@ -848,7 +853,7 @@ export default function App() {
                               <td>{formatDate(item.donation_date)}</td>
                               <td>{money(item.amount)}</td>
                               <td>{item.project_title || tr("General fund", "عمومی فنڈ")}</td>
-                              <td>{String(item.payment_method || "").replace("_", " ")}</td>
+                              <td>{methodLabel(item.payment_method, item.payment_channel)}</td>
                               <td><span className={`status ${item.payment_status}`}>{item.payment_status}</span></td>
                               <td className="row-actions">
                                 {item.payment_status === "pending" && config.online_payments && item.payment_method === "safepay" && (
@@ -903,7 +908,7 @@ export default function App() {
                   <>
                     <p className="muted">
                       {config.online_payments
-                        ? tr("Choose an amount, then you'll be taken to Safepay's secure page to pay by card. Your gift is counted only after Safepay confirms it.", "رقم منتخب کریں، پھر آپ کو کارڈ سے ادائیگی کے لیے Safepay کے محفوظ صفحے پر لے جایا جائے گا۔ آپ کا عطیہ Safepay کی تصدیق کے بعد ہی شمار ہوگا۔")
+                        ? tr("Choose an amount, then you'll be taken to Safepay's secure page to complete your payment. Your gift is counted only after Safepay confirms it.", "رقم منتخب کریں، پھر آپ کو ادائیگی مکمل کرنے کے لیے Safepay کے محفوظ صفحے پر لے جایا جائے گا۔ آپ کا عطیہ Safepay کی تصدیق کے بعد ہی شمار ہوگا۔")
                         : tr("This form creates a pending pledge and does not charge your card. An administrator marks it completed once the funds are received.", "یہ فارم زیرِ التوا عطیہ بناتا ہے اور آپ کے کارڈ سے رقم نہیں کاٹتا۔ رقم موصول ہونے پر ایڈمن اسے مکمل کر دیتا ہے۔")}
                     </p>
                     {config.online_payments && config.sandbox && (
@@ -924,6 +929,21 @@ export default function App() {
                           <input name="amount" type="number" min="1" max="1000000000" step="0.01" value={selectedAmount} onChange={(e) => setSelectedAmount(e.target.value)} placeholder={tr("Enter amount", "رقم درج کریں")} required />
                         </label>
                       </fieldset>
+
+                      {config.online_payments && (config.channels || []).length > 1 && (
+                        <fieldset>
+                          <legend>{tr("Pay with", "ادائیگی کا طریقہ")}</legend>
+                          <div className="channels" role="radiogroup">
+                            {config.channels.map((c) => (
+                              <button type="button" role="radio" aria-checked={channel === c} key={c} className={`channel ${channel === c ? "active" : ""}`} onClick={() => setChannel(c)}>
+                                <span className={`channel-badge ${c}`} aria-hidden="true">{c === "card" ? "▭" : c === "easypaisa" ? "e" : "J"}</span>
+                                {CHANNEL_NAMES[c]}
+                              </button>
+                            ))}
+                          </div>
+                          <small className="muted">{tr("You will finish the payment on Safepay's secure page.", "ادائیگی Safepay کے محفوظ صفحے پر مکمل ہوگی۔")}</small>
+                        </fieldset>
+                      )}
 
                       <label>{tr("Dedicate to a project (optional)", "منصوبے کے لیے مختص کریں (اختیاری)")}
                         <select value={donateProject} onChange={(e) => setDonateProject(e.target.value)}>

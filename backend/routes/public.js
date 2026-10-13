@@ -51,6 +51,7 @@ router.get("/stats", async (req, res) => {
 router.get("/config", (req, res) => {
   res.json({
     online_payments: safepay.isConfigured(),
+    channels: safepay.enabledChannels(),
     payment_provider: "safepay",
     sandbox: process.env.SAFEPAY_ENV !== "production"
   });

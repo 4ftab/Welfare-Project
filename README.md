@@ -64,6 +64,19 @@ and the amount and currency match. The redirect URL alone is never trusted. A pe
 resumed ("Pay now") or re-checked ("Check status") from the dashboard. Without keys, the site falls back
 to plain pledges that an administrator confirms.
 
+### Easypaisa and JazzCash
+
+Safepay has no separate API option for these wallets: they appear on Safepay's hosted checkout once
+Safepay enables them on the merchant account. After Safepay confirms they are enabled, add
+
+```
+SAFEPAY_CHANNELS=card,easypaisa,jazzcash
+```
+
+to `backend/.env`. Donors then get a "Pay with" picker, and the chosen method is stored on the donation
+(`donations.payment_channel`) and shown in the dashboard, admin console and CSV export. Leave it unset
+(card only) until then, otherwise donors would pick a wallet and find only a card form.
+
 Not yet implemented: a Safepay webhook (the shared secret is not configured), so payments are confirmed
 when the donor returns or presses "Check status".
 

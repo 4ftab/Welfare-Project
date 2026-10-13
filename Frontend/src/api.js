@@ -81,3 +81,13 @@ export function currentMonth() {
 
 export const pct = (part, whole) =>
   whole > 0 ? Math.max(0, Math.min(100, (Number(part) / Number(whole)) * 100)) : 0;
+
+const CHANNEL_NAMES = { card: "Card", easypaisa: "Easypaisa", jazzcash: "JazzCash" };
+
+// "safepay · Easypaisa" style label for a donation row.
+export function methodLabel(method, channel) {
+  const base = String(method || "").replace("_", " ");
+  return method === "safepay" && channel ? `${base} · ${CHANNEL_NAMES[channel] || channel}` : base;
+}
+
+export { CHANNEL_NAMES };

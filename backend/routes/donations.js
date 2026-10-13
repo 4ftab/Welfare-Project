@@ -141,11 +141,20 @@ router.post("/", authenticateToken, async (req, res) => {
 
     const note = req.body.note ? String(req.body.note).trim().slice(0, 255) : null;
 
+    const channels = safepay.enabledChannels();
+    const channel = String(req.body.payment_channel || "card").toLowerCase();
+
+    if (!channels.includes(channel)) {
+      return res.status(400).json({
+        message: "That payment method is not available."
+      });
+    }
+
     const [result] = await db.execute(
       `INSERT INTO donations
-       (user_id, project_id, amount, payment_method, payment_status, note)
-       VALUES (?, ?, ?, 'safepay', 'pending', ?)`,
-      [req.user.id, projectId, amount, note]
+       (user_id, project_id, amount, payment_method, payment_status, note, payment_channel)
+       VALUES (?, ?, ?, 'safepay', 'pending', ?, ?)`,
+      [req.user.id, projectId, amount, note, channel]
     );
 
     const donationId = result.insertId;

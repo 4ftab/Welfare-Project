@@ -805,6 +805,60 @@ textarea:focus {
   transform: translateY(-3px);
 }
 
+.channels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1.5px solid #dbe9e5;
+  border-radius: 16px;
+  color: #24544a;
+  font-size: 14px;
+  font-weight: 700;
+  background: #fff;
+  transition: all 0.25s var(--ease);
+}
+
+.channel:hover {
+  border-color: #6fc3aa;
+  transform: translateY(-2px);
+}
+
+.channel.active {
+  border-color: #087f5b;
+  background: linear-gradient(120deg, #eafaf3, #eaf4ff);
+  box-shadow: 0 10px 22px rgba(6, 122, 92, 0.16);
+}
+
+.channel-badge {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 750;
+  background: linear-gradient(135deg, #0a9d8f, #2f7ee6);
+}
+
+.channel-badge.easypaisa {
+  background: linear-gradient(135deg, #3bb54a, #0f8a3c);
+}
+
+.channel-badge.jazzcash {
+  background: linear-gradient(135deg, #e2342d, #a8141a);
+}
+
 .pay-btn {
   min-height: 52px;
   padding-inline: 28px;

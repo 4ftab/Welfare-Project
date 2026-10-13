@@ -21,7 +21,7 @@ router.get("/", authenticateToken, async (req, res) => {
 
     const [donations] = await db.execute(
       `SELECT d.id, d.amount, d.payment_method, d.payment_status,
-              d.transaction_reference, d.project_id,
+              d.transaction_reference, d.project_id, d.payment_channel,
               p.title AS project_title,
               COALESCE(d.donated_at, d.created_at) AS donation_date
        FROM donations d

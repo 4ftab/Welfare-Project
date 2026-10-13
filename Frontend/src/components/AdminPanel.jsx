@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, downloadFile, formatDate, money } from "../api";
+import { api, downloadFile, formatDate, methodLabel, money } from "../api";
 import { DonutChart, ProgressBar, TrendChart } from "./Charts";
 
 const PROJECT_STATUSES = ["planned", "ongoing", "completed", "cancelled"];
@@ -357,7 +357,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
                       <td><strong>{d.full_name}</strong><br /><small className="muted">{d.email}</small></td>
                       <td>{money(d.amount)}</td>
                       <td>{d.project_title || "—"}</td>
-                      <td>{String(d.payment_method).replace("_", " ")}</td>
+                      <td>{methodLabel(d.payment_method, d.payment_channel)}</td>
                       <td><span className={`status ${d.payment_status}`}>{d.payment_status}</span></td>
                       <td>{formatDate(d.donation_date)}</td>
                       <td>

@@ -79,4 +79,24 @@ async function getTrackerState(tracker, expectedAmount) {
   return { state, paid: state === "TRACKER_ENDED" && matches };
 }
 
-module.exports = { isConfigured, createTracker, checkoutUrl, getTrackerState };
+// Payment methods offered to donors. Safepay's hosted checkout decides what it
+// actually renders: wallets only appear once Safepay enables them on the
+// merchant account, so list "easypaisa" / "jazzcash" here only after that.
+const KNOWN_CHANNELS = ["card", "easypaisa", "jazzcash"];
+
+function enabledChannels() {
+  const wanted = String(process.env.SAFEPAY_CHANNELS || "card")
+    .split(",")
+    .map((c) => c.trim().toLowerCase())
+    .filter((c) => KNOWN_CHANNELS.includes(c));
+
+  return wanted.length ? [...new Set(wanted)] : ["card"];
+}
+
+module.exports = {
+  isConfigured,
+  createTracker,
+  checkoutUrl,
+  getTrackerState,
+  enabledChannels
+};
