@@ -1,0 +1,46 @@
+
+const express = require("express");
+const db = require("../config/db");
+const { authenticateToken } = require("../middleware/auth");
+
+const router = express.Router();
+
+router.get("/", authenticateToken, async (req, res) => {
+  try {
+    const [totals] = await db.execute(
+      `SELECT
+         COUNT(*) AS total_donations,
+         COALESCE(
+           SUM(CASE WHEN payment_status = 'completed'
+                    THEN amount ELSE 0 END), 0
+         ) AS total_amount
+       FROM donations
+       WHERE user_id = ?`,
+      [req.user.id]
+    );
+
+    const [donations] = await db.execute(
+      `SELECT id, amount, payment_method, payment_status,
+              transaction_reference,
+              COALESCE(donated_at, created_at) AS donation_date
+       FROM donations
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 10`,
+      [req.user.id]
+    );
+
+    res.json({
+      summary: totals[0],
+      recent_donations: donations
+    });
+  } catch (error) {
+    console.error("Dashboard error:", error.message);
+
+    res.status(500).json({
+      message: "Could not load your dashboard."
+    });
+  }
+});
+
+module.exports = router;
