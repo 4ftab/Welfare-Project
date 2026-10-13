@@ -14,6 +14,7 @@ export async function api(path, { token, ...options } = {}) {
   if (!response.ok) {
     const error = new Error(data.message || "Request failed");
     error.status = response.status;
+    error.code = data.code;
     throw error;
   }
   return data;

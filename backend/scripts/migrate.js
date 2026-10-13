@@ -51,6 +51,22 @@ async function run() {
     console.log("donations.payment_channel: ok");
   }
 
+  if (!(await columnExists("users", "email_verified"))) {
+    await db.query(`
+      ALTER TABLE users
+        ADD COLUMN email_verified TINYINT(1) NOT NULL DEFAULT 0,
+        ADD COLUMN otp_hash CHAR(64) NULL,
+        ADD COLUMN otp_expires_at DATETIME NULL,
+        ADD COLUMN otp_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        ADD COLUMN otp_sent_at DATETIME NULL
+    `);
+    // Accounts created before email verification existed keep working.
+    await db.query("UPDATE users SET email_verified = 1");
+    console.log("users.email_verified + otp columns: added");
+  } else {
+    console.log("users.email_verified: ok");
+  }
+
   console.log("Migration complete.");
 }
 

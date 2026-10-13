@@ -360,6 +360,15 @@
   box-shadow: 0 0 0 3px rgba(33, 134, 83, 0.10);
 }
 
+.auth-modal-form .otp-input,
+.urdu-mode .auth-modal-form .otp-input {
+  direction: ltr;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 8px;
+}
+
 /* Submit button */
 .auth-modal-form .button {
   display: flex;

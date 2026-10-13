@@ -126,7 +126,9 @@ p {
 
 .app-shell {
   min-height: 100vh;
-  overflow: hidden;
+  /* clip (not hidden) so the sticky topbar and sidebar keep working */
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* Top navigation */
@@ -404,6 +406,8 @@ p {
 .sidebar {
   position: sticky;
   top: 98px;
+  max-height: calc(100vh - 118px);
+  overflow-y: auto;
   padding: 21px 13px;
   border: 1px solid rgba(229, 239, 239, 0.9);
   border-radius: 22px;
@@ -1173,7 +1177,10 @@ tbody tr:last-child td {
   }
 
   .sidebar {
-    position: static;
+    position: sticky;
+    top: 75px;
+    z-index: 40;
+    max-height: none;
     width: 100%;
     padding: 10px;
     border-radius: 15px;

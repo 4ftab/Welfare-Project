@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DonationReport from "./DonationReport";
 import AdminPanel from "./components/AdminPanel";
 import { CountUp, DonutChart, ProgressBar, TrendChart } from "./components/Charts";
@@ -40,6 +40,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const pendingAuth = useRef(null);
   const [page, setPage] = useState(pageFromHash);
 
   const [toasts, setToasts] = useState([]);
@@ -248,34 +249,66 @@ export default function App() {
 
   /* ───────── actions ───────── */
 
+  // Switches the modal to the code-entry step for an account whose email is not verified yet.
+  function askForCode(credentials) {
+    pendingAuth.current = credentials;
+    setMode("verify");
+    setAuthMessage(tr(
+      `We emailed a 6-digit code to ${credentials.email}. Enter it below to continue.`,
+      `ہم نے ${credentials.email} پر 6 ہندسوں کا کوڈ بھیجا ہے۔ جاری رکھنے کے لیے اسے نیچے درج کریں۔`
+    ));
+  }
+
   async function submitAuth(event) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const body = Object.fromEntries(new FormData(formElement).entries());
+    const credentials = mode === "verify" ? pendingAuth.current : { email: body.email, password: body.password };
 
     setBusy(true);
     setAuthError("");
     setAuthMessage("");
 
     try {
-      const result = await api(mode === "login" ? "/auth/login" : "/auth/register", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-
       if (mode === "register") {
-        setAuthMessage(result.message || tr("Registration successful. Please sign in.", "رجسٹریشن کامیاب ہوگئی۔ براہ کرم لاگ اِن کریں۔"));
-        setMode("login");
-        formElement.reset();
-      } else {
-        sessionStorage.setItem("welfare_token", result.token);
-        setUser(result.user);
-        setToken(result.token);
-        setAuthOpen(false);
-        formElement.reset();
-        go("dashboard");
-        notify(tr(`Welcome back, ${result.user.full_name}!`, `خوش آمدید، ${result.user.full_name}!`));
+        await api("/auth/register", { method: "POST", body: JSON.stringify(body) });
+        askForCode(credentials);
+        return;
       }
+
+      const result = mode === "verify"
+        ? await api("/auth/verify-otp", { method: "POST", body: JSON.stringify({ ...credentials, otp: body.otp }) })
+        : await api("/auth/login", { method: "POST", body: JSON.stringify(body) });
+
+      pendingAuth.current = null;
+      sessionStorage.setItem("welfare_token", result.token);
+      setUser(result.user);
+      setToken(result.token);
+      setAuthOpen(false);
+      formElement.reset();
+      go("dashboard");
+      notify(mode === "verify"
+        ? tr(`Email verified. Welcome, ${result.user.full_name}!`, `ای میل کی تصدیق ہوگئی۔ خوش آمدید، ${result.user.full_name}!`)
+        : tr(`Welcome back, ${result.user.full_name}!`, `خوش آمدید، ${result.user.full_name}!`));
+    } catch (e) {
+      if (e.code === "EMAIL_NOT_VERIFIED") {
+        askForCode(credentials);
+      } else {
+        setAuthError(e.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendCode() {
+    setBusy(true);
+    setAuthError("");
+    setAuthMessage("");
+
+    try {
+      await api("/auth/resend-otp", { method: "POST", body: JSON.stringify(pendingAuth.current) });
+      setAuthMessage(tr("A new code is on its way to your email.", "نیا کوڈ آپ کی ای میل پر بھیج دیا گیا ہے۔"));
     } catch (e) {
       setAuthError(e.message);
     } finally {
@@ -1177,9 +1210,11 @@ export default function App() {
             <div className="auth-modal-heading">
               <span className="brand-mark">NI</span>
               <span className="eyebrow">{tr("YOUR COMMUNITY ACCOUNT", "آپ کا کمیونٹی اکاؤنٹ")}</span>
-              <h2 id="auth-modal-title">{mode === "login" ? tr("Welcome back", "دوبارہ خوش آمدید") : tr("Join our community", "ہماری کمیونٹی میں شامل ہوں")}</h2>
+              <h2 id="auth-modal-title">{mode === "verify" ? tr("Verify your email", "اپنی ای میل کی تصدیق کریں") : mode === "login" ? tr("Welcome back", "دوبارہ خوش آمدید") : tr("Join our community", "ہماری کمیونٹی میں شامل ہوں")}</h2>
               <p className="muted">
-                {mode === "login"
+                {mode === "verify"
+                  ? tr("Your account opens once you enter the code we emailed you.", "ای میل پر بھیجا گیا کوڈ درج کرنے کے بعد آپ کا اکاؤنٹ کھل جائے گا۔")
+                  : mode === "login"
                   ? tr("Sign in to access your dashboard and donation history.", "اپنا ڈیش بورڈ اور عطیات کی تاریخ دیکھنے کے لیے لاگ اِن کریں۔")
                   : tr("Create your account to join our welfare community.", "ہماری فلاحی کمیونٹی میں شامل ہونے کے لیے اکاؤنٹ بنائیں۔")}
               </p>
@@ -1189,25 +1224,40 @@ export default function App() {
             {authMessage && <div className="notice success" role="status"><span aria-hidden="true">✓</span> {authMessage}</div>}
 
             <form className="form-grid auth-modal-form" onSubmit={submitAuth}>
-              {mode === "register" && (
+              {mode === "verify" ? (
+                <label className="full-width">{tr("Verification code", "تصدیقی کوڈ")}<input key="otp" className="otp-input" name="otp" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" placeholder="000000" required autoComplete="one-time-code" autoFocus /></label>
+              ) : (
                 <>
-                  <label className="full-width">{tr("Full name", "پورا نام")}<input name="full_name" placeholder={tr("Enter your full name", "اپنا پورا نام درج کریں")} required maxLength="100" autoComplete="name" autoFocus /></label>
-                  <label className="full-width">{tr("Phone number", "فون نمبر")}<input name="phone" type="tel" placeholder={tr("Optional", "اختیاری")} autoComplete="tel" /></label>
+                  {mode === "register" && (
+                    <>
+                      <label className="full-width">{tr("Full name", "پورا نام")}<input name="full_name" placeholder={tr("Enter your full name", "اپنا پورا نام درج کریں")} required maxLength="100" autoComplete="name" autoFocus /></label>
+                      <label className="full-width">{tr("Phone number", "فون نمبر")}<input name="phone" type="tel" placeholder={tr("Optional", "اختیاری")} autoComplete="tel" /></label>
+                    </>
+                  )}
+                  <label className="full-width">{tr("Email address", "ای میل ایڈریس")}<input name="email" type="email" placeholder="you@example.com" required autoComplete="email" autoFocus={mode === "login"} /></label>
+                  <label className="full-width">{tr("Password", "پاس ورڈ")}<input name="password" type="password" placeholder={tr("At least 8 characters", "کم از کم 8 حروف")} minLength="8" required autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
                 </>
               )}
-              <label className="full-width">{tr("Email address", "ای میل ایڈریس")}<input name="email" type="email" placeholder="you@example.com" required autoComplete="email" autoFocus={mode === "login"} /></label>
-              <label className="full-width">{tr("Password", "پاس ورڈ")}<input name="password" type="password" placeholder={tr("At least 8 characters", "کم از کم 8 حروف")} minLength="8" required autoComplete={mode === "login" ? "current-password" : "new-password"} /></label>
               <button className="button button-primary full-width" type="submit" disabled={busy}>
-                {busy ? tr("Please wait...", "براہ کرم انتظار کریں...") : mode === "login" ? tr("Sign in to your account →", "اپنے اکاؤنٹ میں لاگ اِن کریں →") : tr("Create my account →", "میرا اکاؤنٹ بنائیں →")}
+                {busy ? tr("Please wait...", "براہ کرم انتظار کریں...") : mode === "verify" ? tr("Verify and continue →", "تصدیق کریں اور جاری رکھیں →") : mode === "login" ? tr("Sign in to your account →", "اپنے اکاؤنٹ میں لاگ اِن کریں →") : tr("Create my account →", "میرا اکاؤنٹ بنائیں →")}
               </button>
             </form>
 
-            <p className="switch-mode auth-modal-switch">
-              {mode === "login" ? tr("Don't have an account?", "اکاؤنٹ نہیں ہے؟") : tr("Already have an account?", "پہلے سے اکاؤنٹ موجود ہے؟")}{" "}
-              <button type="button" className="text-button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setAuthError(""); setAuthMessage(""); }} disabled={busy}>
-                {mode === "login" ? tr("Register here", "یہاں رجسٹر کریں") : tr("Sign in", "لاگ اِن کریں")}
-              </button>
-            </p>
+            {mode === "verify" ? (
+              <p className="switch-mode auth-modal-switch">
+                {tr("Didn't get the code?", "کوڈ نہیں ملا؟")}{" "}
+                <button type="button" className="text-button" onClick={resendCode} disabled={busy}>{tr("Send again", "دوبارہ بھیجیں")}</button>
+                {" · "}
+                <button type="button" className="text-button" onClick={() => openAuth("register")} disabled={busy}>{tr("Use a different email", "دوسری ای میل استعمال کریں")}</button>
+              </p>
+            ) : (
+              <p className="switch-mode auth-modal-switch">
+                {mode === "login" ? tr("Don't have an account?", "اکاؤنٹ نہیں ہے؟") : tr("Already have an account?", "پہلے سے اکاؤنٹ موجود ہے؟")}{" "}
+                <button type="button" className="text-button" onClick={() => { setMode(mode === "login" ? "register" : "login"); setAuthError(""); setAuthMessage(""); }} disabled={busy}>
+                  {mode === "login" ? tr("Register here", "یہاں رجسٹر کریں") : tr("Sign in", "لاگ اِن کریں")}
+                </button>
+              </p>
+            )}
             <p className="auth-modal-footer">{tr("Nojawan Itehad Welfare · Chitta Batta", "نوجوان اتحاد ویلفیئر · چھٹہ بٹہ")}</p>
           </section>
         </div>

@@ -10,7 +10,7 @@ financial reports, donor accounts and statements, and an administrator console. 
 cd backend
 npm install
 # .env needs: PORT, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET, FRONTEND_URL
-npm run migrate      # idempotent; adds contact_messages, donations.project_id, donations.note
+npm run migrate      # idempotent; adds contact_messages, donations.project_id, donations.note, users OTP columns
 npm run make-admin   # promote a registered user to administrator
 npm run dev
 
@@ -43,8 +43,29 @@ npm run dev          # http://localhost:5173
 - Inbox for contact-form messages; activity log of every administrative action
 
 **Platform**
+- Email OTP verification for new accounts
 - Login/registration and contact-form rate limiting, security headers, CSV formula-injection guard
 - Skip link, ARIA roles, reduced-motion support, responsive layout
+
+## Email verification (OTP)
+
+A new account stays locked until the donor enters the 6-digit code emailed at registration. The code
+expires after 10 minutes, allows 5 wrong attempts, and can be re-sent once a minute. Signing in to an
+unverified account sends a fresh code and returns to the code step. Accounts that existed before this
+feature are marked verified by `npm run migrate`.
+
+Add SMTP settings to `backend/.env` so the codes are actually emailed:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587                  # 465 for implicit TLS
+SMTP_USER=you@gmail.com
+SMTP_PASS=...                  # for Gmail: an App Password, not the account password
+MAIL_FROM="Nojawan Itehad Welfare <you@gmail.com>"
+```
+
+Without these, development prints the code to the backend console instead of emailing it; with
+`NODE_ENV=production` registration fails until SMTP is configured.
 
 ## Online payments (Safepay)
 
