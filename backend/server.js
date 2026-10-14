@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 
 const express = require("express");
@@ -20,11 +19,30 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "https://nojawan-itehad-welfare-chi.vercel.app",
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
 app.disable("x-powered-by");
-app.use(cors({ origin: allowedOrigins }));
+
+// CORS configuration
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests without an Origin header, such as server-to-server calls.
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn("CORS blocked origin:", origin);
+      return callback(new Error("Origin not allowed by CORS"));
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+    optionsSuccessStatus: 204
+  })
+);
 
 app.use((req, res, next) => {
   res.set({
@@ -94,6 +112,7 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log("MySQL connected successfully.");
+      console.log("Allowed frontend origins:", allowedOrigins);
     });
   } catch (error) {
     console.error("Could not connect to MySQL:", error.message);
