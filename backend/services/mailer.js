@@ -1,5 +1,6 @@
 // Transactional email through Brevo's HTTPS API (port 443). Render blocks or throttles
 // outbound SMTP, so the API is used instead of Nodemailer/SMTP.
+const http = require("http");
 const https = require("https");
 
 const DEFAULT_SENDER = "nojawan.itehad.welfare@gmail.com";
@@ -52,14 +53,48 @@ function configProblems() {
   return problems;
 }
 
+// Brevo's API lives at api.brevo.com. BREVO_API_URL exists only so tests can point at a local fake;
+// it is ignored in production.
+function endpoint() {
+  const override = clean(process.env.BREVO_API_URL);
+
+  if (override && process.env.NODE_ENV !== "production") {
+    const url = new URL(override);
+    return {
+      mod: url.protocol === "http:" ? http : https,
+      hostname: url.hostname,
+      port: url.port || undefined,
+      base: url.pathname.replace(/\/+$/, "")
+    };
+  }
+
+  return { mod: https, hostname: "api.brevo.com", port: undefined, base: "/v3" };
+}
+
+const REQUEST_TIMEOUT_MS = () => Number(process.env.BREVO_TIMEOUT_MS) || 15000;
+
+// Resolves { status, data, ms, timing } or rejects with an error carrying status / ms / timing.
+// timing is cumulative milliseconds since the request began, which shows where the time went:
+//   dns_ms -> connect_ms -> tls_ms -> first_byte_ms (Brevo's answer) -> ms (everything read).
 function brevoRequest(method, path, body) {
   const payload = body ? JSON.stringify(body) : null;
+  const target = endpoint();
+  const started = process.hrtime.bigint();
+  const since = () => Math.round(Number(process.hrtime.bigint() - started) / 1e6);
+  const timing = {};
 
   return new Promise((resolve, reject) => {
-    const req = https.request(
+    const fail = (error) => {
+      error.ms = since();
+      error.timing = timing;
+      reject(error);
+    };
+
+    const req = target.mod.request(
       {
-        hostname: "api.brevo.com",
-        path: `/v3${path}`,
+        hostname: target.hostname,
+        port: target.port,
+        path: `${target.base}${path}`,
         method,
         headers: {
           "api-key": apiKey(),
@@ -68,9 +103,11 @@ function brevoRequest(method, path, body) {
             ? { "content-type": "application/json", "content-length": Buffer.byteLength(payload) }
             : {})
         },
-        timeout: 15000
+        timeout: REQUEST_TIMEOUT_MS()
       },
       (res) => {
+        timing.first_byte_ms = since();
+
         let text = "";
         res.setEncoding("utf8");
         res.on("data", (chunk) => { text += chunk; });
@@ -79,21 +116,37 @@ function brevoRequest(method, path, body) {
           try { data = JSON.parse(text); } catch { /* non-JSON body */ }
 
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            return resolve(data);
+            return resolve({ status: res.statusCode, data, ms: since(), timing });
           }
 
           const error = new Error(
             `Brevo API error (${res.statusCode}): ${data.message || text.slice(0, 200)}`
           );
           error.status = res.statusCode;
+          error.providerCode = data.code;
           error.hint = explain(res.statusCode, data.message || "");
-          reject(error);
+          fail(error);
         });
       }
     );
 
-    req.on("timeout", () => req.destroy(new Error("Brevo API connection timed out.")));
-    req.on("error", reject);
+    req.on("socket", (socket) => {
+      if (!socket.connecting) {
+        timing.reused_connection = true;
+        return;
+      }
+      socket.once("lookup", () => { timing.dns_ms = since(); });
+      socket.once("connect", () => { timing.connect_ms = since(); });
+      socket.once("secureConnect", () => { timing.tls_ms = since(); });
+    });
+
+    req.on("timeout", () => {
+      const error = new Error("Brevo API connection timed out.");
+      error.code = "BREVO_TIMEOUT";
+      req.destroy(error);
+    });
+
+    req.on("error", fail);
     if (payload) req.write(payload);
     req.end();
   });
@@ -123,28 +176,64 @@ function explain(status, message) {
 
 let warned = false;
 
-async function sendMail({ to, subject, text, html }) {
+// Sends one email. The optional trace records when the request started, whether Brevo accepted it,
+// Brevo's message id (use it to look the email up later) and how long each stage took.
+async function sendMail({ to, subject, text, html }, trace) {
   const problems = configProblems();
 
   if (problems.length) {
     throw new Error(`Email is not configured: ${problems.join(" ")}`);
   }
 
+  trace?.mark("mail_request_start");
+
   try {
-    await brevoRequest("POST", "/smtp/email", {
+    const result = await brevoRequest("POST", "/smtp/email", {
       sender: sender(),
       to: [{ email: to }],
       subject,
       textContent: text,
       htmlContent: html
     });
+
+    const messageId = result.data.messageId;
+
+    trace?.mark("mail_accepted", {
+      status: result.status,
+      provider_ms: result.ms,
+      ...result.timing,
+      messageId,
+      accepted_at: new Date().toISOString()
+    });
+
+    return { messageId };
   } catch (error) {
+    // Only status codes and timings are logged, never Brevo's free-text message or the key.
+    trace?.mark("mail_failed", {
+      status: error.status,
+      provider_code: error.providerCode,
+      error_code: error.code,
+      provider_ms: error.ms,
+      ...error.timing
+    });
+
     if (error.hint && !warned) {
       console.error(`Email hint: ${error.hint} (key ${describeKey(apiKey())})`);
       warned = true;
     }
     throw error;
   }
+}
+
+// Brevo's own record of what happened to an email after it accepted it (requests, deferred, delivered, ...).
+// Filter by the messageId from the "mail_accepted" log line, or by recipient address.
+async function getEmailEvents({ messageId, email, days = 2 }) {
+  const query = new URLSearchParams({ days: String(days), sort: "asc" });
+  if (messageId) query.set("messageId", messageId);
+  if (email) query.set("email", email);
+
+  const { data } = await brevoRequest("GET", `/smtp/statistics/events?${query}`);
+  return data.events || [];
 }
 
 // Called at startup: confirms the key works without sending anything, and logs what to fix.
@@ -161,7 +250,7 @@ async function checkConfig() {
   }
 
   try {
-    const account = await brevoRequest("GET", "/account");
+    const { data: account } = await brevoRequest("GET", "/account");
     console.log(
       `Email: Brevo API key accepted (account ${account.email || "unknown"}); sending as ${sender().email}.`
     );
@@ -178,10 +267,11 @@ function escapeHtml(value) {
   }[c]));
 }
 
-async function sendOtpEmail(to, name, code, minutes) {
+async function sendOtpEmail(to, name, code, minutes, trace) {
   // Local development only: print the code instead of emailing it. Never active in production.
   if (process.env.MAIL_DEV_LOG_OTP === "true" && process.env.NODE_ENV !== "production") {
     console.log(`[dev] OTP for ${to}: ${code}`);
+    trace?.mark("dev_mode_no_email_sent");
     return;
   }
 
@@ -206,11 +296,11 @@ async function sendOtpEmail(to, name, code, minutes) {
           If you did not create an account, you can ignore this email.
         </p>
       </div>`
-  });
+  }, trace);
 }
 
 function isConfigured() {
   return configProblems().length === 0;
 }
 
-module.exports = { isConfigured, checkConfig, sendMail, sendOtpEmail, sender };
+module.exports = { isConfigured, checkConfig, sendMail, sendOtpEmail, sender, getEmailEvents };

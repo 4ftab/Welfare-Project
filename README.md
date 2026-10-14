@@ -121,3 +121,34 @@ current look ("golden hour in the village"): ivory surfaces, forest/emerald/teal
 - **Icons**: `components/Glyphs.jsx` (`Icon` for UI, `Glyph` for project emblems; `glyphRules.js` picks an emblem from the
   project title). Use these instead of emoji or unicode symbols so every device renders the same shapes.
 - **Tables** that should stack on phones get `className="table-wrap stack"` and a `data-label` on each `<td>`.
+
+## Diagnosing slow OTP emails
+
+Every OTP request prints single-line timing logs (visible in Render → Logs; search for `[otp]`). They never contain the
+code, passwords, API keys or the full email address (addresses are masked, e.g. `ab***@gmail.com`).
+
+```
+[otp] {"t":"2026-10-14T10:00:03.412Z","trace":"a1b2c3","action":"register","to":"ab***@gmail.com","phase":"mail_accepted","step_ms":412,"total_ms":2310,"status":201,"provider_ms":412,"dns_ms":18,"connect_ms":41,"tls_ms":97,"first_byte_ms":405,"messageId":"<...@smtp-relay.mailin.fr>","accepted_at":"2026-10-14T10:00:03.412Z"}
+```
+
+Phases, in order: `request_start` (with `uptime_s` / `fresh_boot` to spot a server that was asleep) → `validated_and_looked_up` →
+`password_hashed` → `user_saved` → `otp_stored` → `mail_request_start` → `mail_accepted` (or `mail_failed`) → `response_sent`.
+`step_ms` is the time since the previous line, so the biggest `step_ms` shows where the time went. Inside `mail_accepted`,
+`dns_ms` → `connect_ms` → `tls_ms` → `first_byte_ms` are cumulative, so `first_byte_ms - tls_ms` is how long Brevo itself took to answer.
+
+**Delay before Brevo accepted the email**: the log shows it (large `total_ms`, or a large `step_ms` on one phase).
+**Delay after acceptance** (Brevo to Gmail): the app cannot see it, so ask Brevo for its own record with the `messageId` from the log
+(needs `BREVO_API_KEY` in `backend/.env`):
+
+```
+npm run email-trace -- "<messageId from the log>"
+npm run email-trace -- someone@gmail.com            # recent emails to an address
+```
+
+It prints Brevo's events (`requests` → `deferred` → `delivered`) with the gaps in seconds. A long `requests` → `delivered` gap, especially
+with `deferred` lines, means Gmail's servers were slow to accept it. If `delivered` is quick but the message shows up late, the delay is inside Gmail.
+
+To line the clocks up: log times are UTC (`Z`); Pakistan time is UTC+5. In Gmail open the email → ⋮ → **Show original**: the top shows
+*Created at … (Delivered after N seconds)*, and `Received:` lines show each hop's time; `Authentication-Results` shows whether SPF / DKIM / DMARC passed.
+
+A registration or login inside the 60-second resend window does not send another email; each skip is logged as `skipped_cooldown`.

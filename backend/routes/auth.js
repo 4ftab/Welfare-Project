@@ -7,6 +7,7 @@ const { authenticateToken } = require("../middleware/auth");
 const rateLimit = require("../middleware/rateLimit");
 const crypto = require("crypto");
 const { sendOtpEmail } = require("../services/mailer");
+const { createTrace, traceRequest } = require("../services/otpTrace");
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -28,7 +29,7 @@ function hashOtp(code) {
 }
 
 // Stores a fresh 6-digit code for the user and emails it. Any earlier code stops working.
-async function issueOtp(user) {
+async function issueOtp(user, trace) {
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
 
   await db.execute(
@@ -41,11 +42,14 @@ async function issueOtp(user) {
     [hashOtp(code), user.id]
   );
 
+  trace?.mark("otp_stored");
+
   try {
-    await sendOtpEmail(user.email, user.full_name, code, OTP_TTL_MINUTES);
+    await sendOtpEmail(user.email, user.full_name, code, OTP_TTL_MINUTES, trace);
   } catch (error) {
     // Let the user ask again straight away if the email never left.
     await db.execute("UPDATE users SET otp_sent_at = NULL WHERE id = ?", [user.id]);
+    trace?.mark("otp_cooldown_reset_after_failure");
     throw error;
   }
 }
@@ -71,6 +75,8 @@ function sessionFor(user) {
 const MAIL_FAILED = "We could not send the verification email. Please try again in a moment.";
 
 router.post("/register", loginLimiter, async (req, res) => {
+  const trace = traceRequest(req, res, "register");
+
   try {
     const { full_name, email, phone, password } = req.body;
 
@@ -101,9 +107,12 @@ router.post("/register", loginLimiter, async (req, res) => {
     }
 
     const [existing] = await db.execute(
-      "SELECT id, email_verified FROM users WHERE email = ?",
+      `SELECT id, email_verified, TIMESTAMPDIFF(SECOND, otp_sent_at, NOW()) AS otp_age
+       FROM users WHERE email = ?`,
       [normalizedEmail]
     );
+
+    trace.mark("validated_and_looked_up", { existing_unverified: existing.length > 0 });
 
     if (existing.length && existing[0].email_verified) {
       return res.status(409).json({
@@ -112,6 +121,7 @@ router.post("/register", loginLimiter, async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    trace.mark("password_hashed");
     const name = String(full_name).trim();
     const phoneValue = phone ? String(phone).trim() : null;
     let userId;
@@ -135,8 +145,25 @@ router.post("/register", loginLimiter, async (req, res) => {
       userId = result.insertId;
     }
 
+    trace.mark("user_saved");
+
+    // A code went out moments ago (double-click, retry, or registering again): do not email a second
+    // one. This also keeps the resend cooldown meaningful, because register can no longer reset it.
+    const sentRecently =
+      existing.length > 0 && existing[0].otp_age !== null && existing[0].otp_age < OTP_RESEND_SECONDS;
+
+    if (sentRecently) {
+      trace.mark("skipped_cooldown", { age_s: existing[0].otp_age });
+
+      return res.status(201).json({
+        message: "We already emailed you a 6-digit verification code a moment ago. Please check your inbox.",
+        verification_required: true,
+        email: normalizedEmail
+      });
+    }
+
     try {
-      await issueOtp({ id: userId, email: normalizedEmail, full_name: name });
+      await issueOtp({ id: userId, email: normalizedEmail, full_name: name }, trace);
     } catch (error) {
       console.error("Verification email error:", error.message);
       return res.status(502).json({ message: MAIL_FAILED });
@@ -149,6 +176,21 @@ router.post("/register", loginLimiter, async (req, res) => {
     });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
+      // Two registrations for the same new email arrived together. The other request is creating the
+      // account and sending the code, so this one must not send another or claim the email is taken.
+      const racedEmail = String(req.body?.email || "").trim().toLowerCase();
+      const [rows] = await db.execute("SELECT email_verified FROM users WHERE email = ?", [racedEmail]);
+
+      if (rows.length && !rows[0].email_verified) {
+        trace.mark("skipped_concurrent_registration");
+
+        return res.status(201).json({
+          message: "We already emailed you a 6-digit verification code a moment ago. Please check your inbox.",
+          verification_required: true,
+          email: racedEmail
+        });
+      }
+
       return res.status(409).json({
         message: "This email is already registered."
       });
@@ -163,6 +205,8 @@ router.post("/register", loginLimiter, async (req, res) => {
 });
 
 router.post("/login", loginLimiter, async (req, res) => {
+  const loginStarted = process.hrtime.bigint();
+
   try {
     const { email, password } = req.body;
 
@@ -205,10 +249,17 @@ router.post("/login", loginLimiter, async (req, res) => {
     }
 
     if (!user.email_verified) {
+      const trace = createTrace("login_unverified", user.email, { since: loginStarted });
+      res.on("finish", () => trace.mark("response_sent", { status: res.statusCode }));
+
       // Send a fresh code unless one went out moments ago.
+      if (user.otp_age !== null && user.otp_age < OTP_RESEND_SECONDS) {
+        trace.mark("skipped_cooldown", { age_s: user.otp_age });
+      }
+
       if (user.otp_age === null || user.otp_age >= OTP_RESEND_SECONDS) {
         try {
-          await issueOtp(user);
+          await issueOtp(user, trace);
         } catch (error) {
           console.error("Verification email error:", error.message);
           return res.status(502).json({ message: MAIL_FAILED });
@@ -275,6 +326,8 @@ async function findPendingUser(req, res) {
 }
 
 router.post("/verify-otp", loginLimiter, async (req, res) => {
+  traceRequest(req, res, "verify");
+
   try {
     const user = await findPendingUser(req, res);
     if (!user) return;
@@ -330,12 +383,17 @@ router.post("/verify-otp", loginLimiter, async (req, res) => {
 });
 
 router.post("/resend-otp", loginLimiter, async (req, res) => {
+  const trace = traceRequest(req, res, "resend");
+
   try {
     const user = await findPendingUser(req, res);
     if (!user) return;
 
+    trace.mark("credentials_checked");
+
     if (user.otp_age !== null && user.otp_age < OTP_RESEND_SECONDS) {
       const wait = OTP_RESEND_SECONDS - user.otp_age;
+      trace.mark("skipped_cooldown", { wait_s: wait });
 
       res.set("Retry-After", String(wait));
       return res.status(429).json({
@@ -344,7 +402,7 @@ router.post("/resend-otp", loginLimiter, async (req, res) => {
     }
 
     try {
-      await issueOtp(user);
+      await issueOtp(user, trace);
     } catch (error) {
       console.error("Verification email error:", error.message);
       return res.status(502).json({ message: MAIL_FAILED });
