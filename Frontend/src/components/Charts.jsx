@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { compactMoney, money, monthLabel } from "../api";
 
-const CHART_COLORS = ["#087f5b", "#3b82f6", "#f5b942", "#12a89d", "#8b5cf6", "#ef6b6b"];
+const CHART_COLORS = ["#087f5b", "#e0b04a", "#12a89d", "#6b8f71", "#c97b4a", "#8a73a8"];
 
 /** Grouped bar chart: donations vs expenses per month. */
 export function TrendChart({ series, labels }) {
@@ -30,10 +30,10 @@ export function TrendChart({ series, labels }) {
           const hE = (s.expenses / max) * height;
           return (
             <g key={s.month}>
-              <rect x={x} y={height - hD + 4} width={barW} height={Math.max(hD, 1)} rx="4" fill="#087f5b">
+              <rect className="bar" style={{ "--i": i }} x={x} y={height - hD + 4} width={barW} height={Math.max(hD, 1)} rx="4" fill="#087f5b">
                 <title>{`${monthLabel(s.month)}: ${labels.donations} ${money(s.donations)}`}</title>
               </rect>
-              <rect x={x + barW + 4} y={height - hE + 4} width={barW} height={Math.max(hE, 1)} rx="4" fill="#f5b942">
+              <rect className="bar" style={{ "--i": i }} x={x + barW + 4} y={height - hE + 4} width={barW} height={Math.max(hE, 1)} rx="4" fill="#e0b04a">
                 <title>{`${monthLabel(s.month)}: ${labels.expenses} ${money(s.expenses)}`}</title>
               </rect>
               <text x={x + barW + 2} y={height + 22} textAnchor="middle" className="axis-label">
@@ -45,7 +45,7 @@ export function TrendChart({ series, labels }) {
       </svg>
       <div className="chart-legend">
         <span><i style={{ background: "#087f5b" }} />{labels.donations}</span>
-        <span><i style={{ background: "#f5b942" }} />{labels.expenses}</span>
+        <span><i style={{ background: "#e0b04a" }} />{labels.expenses}</span>
         <span className="muted">{labels.peak}: PKR {compactMoney(max)}</span>
       </div>
     </div>
@@ -85,9 +85,46 @@ export function DonutChart({ data, emptyText }) {
   );
 }
 
+// Runs `start` once the element is on screen (immediately when motion is reduced or unsupported).
+function useWhenVisible(ref, start, deps) {
+  useEffect(() => {
+    const el = ref.current;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    if (!el || reduce || !("IntersectionObserver" in window)) {
+      const id = requestAnimationFrame(() => start(true));
+      return () => cancelAnimationFrame(id);
+    }
+
+    let cancel;
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        io.disconnect();
+        cancel = start(false);
+      }
+    }, { threshold: 0.35 });
+
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      if (typeof cancel === "function") cancel();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
 export function ProgressBar({ value, tone = "green", label }) {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(0);
+
+  useWhenVisible(ref, () => {
+    const id = requestAnimationFrame(() => setShown(value));
+    return () => cancelAnimationFrame(id);
+  }, [value]);
+
   return (
     <div
+      ref={ref}
       className="progress"
       role="progressbar"
       aria-valuenow={Math.round(value)}
@@ -95,7 +132,7 @@ export function ProgressBar({ value, tone = "green", label }) {
       aria-valuemax="100"
       aria-label={label}
     >
-      <span className={`progress-fill ${tone}`} style={{ width: `${value}%` }} />
+      <span className={`progress-fill ${tone}`} style={{ width: `${shown}%` }} />
     </div>
   );
 }
@@ -105,19 +142,18 @@ export function CountUp({ value, format = (n) => Math.round(n).toLocaleString("e
   const [shown, setShown] = useState(0);
   const ref = useRef(null);
 
-  useEffect(() => {
+  useWhenVisible(ref, (instant) => {
     const target = Number(value) || 0;
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduce || target === 0) {
+    if (instant || target === 0) {
       const id = requestAnimationFrame(() => setShown(target));
       return () => cancelAnimationFrame(id);
     }
     let frame;
     const start = performance.now();
-    const duration = 1100;
+    const duration = 1300;
     const tick = (now) => {
       const t = Math.min(1, (now - start) / duration);
-      setShown(target * (1 - Math.pow(1 - t, 3)));
+      setShown(target * (1 - Math.pow(1 - t, 4)));
       if (t < 1) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);

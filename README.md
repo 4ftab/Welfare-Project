@@ -107,3 +107,17 @@ SAFEPAY_CHANNELS=card,easypaisa,jazzcash
 
 Donors then get a "Pay with" picker. When Safepay reports which processor took the payment, the stored
 method is updated to match. Leave it unset (card only) until then.
+
+## Design system
+
+The frontend styles are layered, each file refining the one before it. `src/design.css` loads last and holds the
+current look ("golden hour in the village"): ivory surfaces, forest/emerald/teal, and gold as the single warm accent.
+
+- **Tokens** live at the top of `design.css` (`--forest-*`, `--emerald-*`, `--teal-400`, `--gold-*`, `--ivory-*`, `--ease-out`).
+- **Motion** is progressive enhancement. `src/useAmbient.js` drives the scroll progress bar, the condensing navbar,
+  the staggered reveal-on-scroll, the hero pointer parallax and magnetic buttons (`data-magnetic`). Every animation is
+  switched off under `prefers-reduced-motion`, and content stays visible if JavaScript or IntersectionObserver is missing.
+- **Illustration**: the hero scene is hand-built SVG (`components/Village.jsx`), so there are no images to download.
+- **Icons**: `components/Glyphs.jsx` (`Icon` for UI, `Glyph` for project emblems; `glyphRules.js` picks an emblem from the
+  project title). Use these instead of emoji or unicode symbols so every device renders the same shapes.
+- **Tables** that should stack on phones get `className="table-wrap stack"` and a `data-label` on each `<td>`.

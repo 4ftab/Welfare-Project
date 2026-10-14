@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, downloadFile, formatDate, methodLabel, money } from "../api";
 import { DonutChart, ProgressBar, TrendChart } from "./Charts";
+import { Icon } from "./Glyphs";
 
 const PROJECT_STATUSES = ["planned", "ongoing", "completed", "cancelled"];
 
@@ -244,7 +245,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
 
           {overview.pending_count > 0 && (
             <div className="notice warn" role="status">
-              <span aria-hidden="true">⏳</span>
+              <span aria-hidden="true"><Icon name="hourglass" size={18} /></span>
               {tr(
                 `${overview.pending_count} pledge(s) are waiting for confirmation.`,
                 `${overview.pending_count} عطیات تصدیق کے منتظر ہیں۔`
@@ -429,7 +430,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
                   {filteredExpenses.map((e) => (
                     <tr key={e.id}>
                       <td>{formatDate(e.expense_date)}</td><td>{e.title}</td><td>{e.category}</td><td>{e.project_title || "—"}</td><td>{money(e.amount)}</td><td>{e.receipt_reference || "—"}</td>
-                      <td><button className="icon-btn danger" aria-label={tr("Delete expense", "اخراجات حذف کریں")} onClick={() => confirmThen(tr("Delete this expense?", "کیا یہ اخراجات حذف کریں؟"), () => act(() => api(`/expenses/${e.id}`, { method: "DELETE", token }), tr("Expense deleted.", "اخراجات حذف ہوگئے۔")))}>🗑</button></td>
+                      <td><button className="icon-btn danger" aria-label={tr("Delete expense", "اخراجات حذف کریں")} onClick={() => confirmThen(tr("Delete this expense?", "کیا یہ اخراجات حذف کریں؟"), () => act(() => api(`/expenses/${e.id}`, { method: "DELETE", token }), tr("Expense deleted.", "اخراجات حذف ہوگئے۔")))}><Icon name="trash" size={16} /></button></td>
                     </tr>
                   ))}
                   {!filteredExpenses.length && <tr><td colSpan="7">{tr("No expenses match.", "کوئی اخراجات نہیں ملے۔")}</td></tr>}
@@ -484,8 +485,8 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
                       <td style={{ minWidth: 150 }}>{money(p.raised)} / {money(p.budget)}<ProgressBar value={p.budget > 0 ? Math.min(100, (p.raised / p.budget) * 100) : 0} label={p.title} /></td>
                       <td>{money(p.spent)}</td>
                       <td className="row-actions">
-                        <button className="icon-btn" aria-label={tr("Edit project", "منصوبہ ترمیم")} onClick={() => { setEditingProject(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}>✎</button>
-                        <button className="icon-btn danger" aria-label={tr("Delete project", "منصوبہ حذف")} onClick={() => confirmThen(tr("Delete this project?", "کیا یہ منصوبہ حذف کریں؟"), () => act(() => api(`/projects/${p.id}`, { method: "DELETE", token }), tr("Project deleted.", "منصوبہ حذف ہوگیا۔"), { alsoPublic: true }))}>🗑</button>
+                        <button className="icon-btn" aria-label={tr("Edit project", "منصوبہ ترمیم")} onClick={() => { setEditingProject(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Icon name="edit" size={16} /></button>
+                        <button className="icon-btn danger" aria-label={tr("Delete project", "منصوبہ حذف")} onClick={() => confirmThen(tr("Delete this project?", "کیا یہ منصوبہ حذف کریں؟"), () => act(() => api(`/projects/${p.id}`, { method: "DELETE", token }), tr("Project deleted.", "منصوبہ حذف ہوگیا۔"), { alsoPublic: true }))}><Icon name="trash" size={16} /></button>
                       </td>
                     </tr>
                   ))}
@@ -525,9 +526,9 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
                   <small className="muted">{formatDate(a.created_at)}</small>
                 </div>
                 <div className="row-actions">
-                  <button className="icon-btn" aria-label={tr("Edit", "ترمیم")} onClick={() => { setEditingAnn(a); window.scrollTo({ top: 0, behavior: "smooth" }); }}>✎</button>
-                  <button className="icon-btn" aria-label={a.is_published ? tr("Hide", "چھپائیں") : tr("Show", "دکھائیں")} onClick={() => act(() => post(`/announcements/${a.id}`, { title: a.title, body: a.body, is_published: !a.is_published }, "PUT"), tr("Visibility changed.", "ظاہری حیثیت تبدیل ہوگئی۔"), { alsoPublic: true })}>{a.is_published ? "🙈" : "👁"}</button>
-                  <button className="icon-btn danger" aria-label={tr("Delete", "حذف")} onClick={() => confirmThen(tr("Delete this announcement?", "کیا یہ اعلان حذف کریں؟"), () => act(() => api(`/announcements/${a.id}`, { method: "DELETE", token }), tr("Announcement deleted.", "اعلان حذف ہوگیا۔"), { alsoPublic: true }))}>🗑</button>
+                  <button className="icon-btn" aria-label={tr("Edit", "ترمیم")} onClick={() => { setEditingAnn(a); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Icon name="edit" size={16} /></button>
+                  <button className="icon-btn" aria-label={a.is_published ? tr("Hide", "چھپائیں") : tr("Show", "دکھائیں")} onClick={() => act(() => post(`/announcements/${a.id}`, { title: a.title, body: a.body, is_published: !a.is_published }, "PUT"), tr("Visibility changed.", "ظاہری حیثیت تبدیل ہوگئی۔"), { alsoPublic: true })}><Icon name={a.is_published ? "eyeoff" : "eye"} size={16} /></button>
+                  <button className="icon-btn danger" aria-label={tr("Delete", "حذف")} onClick={() => confirmThen(tr("Delete this announcement?", "کیا یہ اعلان حذف کریں؟"), () => act(() => api(`/announcements/${a.id}`, { method: "DELETE", token }), tr("Announcement deleted.", "اعلان حذف ہوگیا۔"), { alsoPublic: true }))}><Icon name="trash" size={16} /></button>
                 </div>
               </article>
             ))}
@@ -592,8 +593,8 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
                 <small className="muted">{formatDate(m.created_at)}</small>
               </div>
               <div className="row-actions">
-                <button className="icon-btn" aria-label={m.is_read ? tr("Mark unread", "نہ پڑھا") : tr("Mark read", "پڑھا ہوا")} onClick={() => act(() => post(`/admin/messages/${m.id}`, { is_read: !m.is_read }, "PATCH"), tr("Message updated.", "پیغام اپ ڈیٹ ہوگیا۔"))}>{m.is_read ? "✉" : "✓"}</button>
-                <button className="icon-btn danger" aria-label={tr("Delete message", "پیغام حذف")} onClick={() => confirmThen(tr("Delete this message?", "کیا یہ پیغام حذف کریں؟"), () => act(() => api(`/admin/messages/${m.id}`, { method: "DELETE", token }), tr("Message deleted.", "پیغام حذف ہوگیا۔")))}>🗑</button>
+                <button className="icon-btn" aria-label={m.is_read ? tr("Mark unread", "نہ پڑھا") : tr("Mark read", "پڑھا ہوا")} onClick={() => act(() => post(`/admin/messages/${m.id}`, { is_read: !m.is_read }, "PATCH"), tr("Message updated.", "پیغام اپ ڈیٹ ہوگیا۔"))}><Icon name={m.is_read ? "mail" : "mailopen"} size={16} /></button>
+                <button className="icon-btn danger" aria-label={tr("Delete message", "پیغام حذف")} onClick={() => confirmThen(tr("Delete this message?", "کیا یہ پیغام حذف کریں؟"), () => act(() => api(`/admin/messages/${m.id}`, { method: "DELETE", token }), tr("Message deleted.", "پیغام حذف ہوگیا۔")))}><Icon name="trash" size={16} /></button>
               </div>
             </article>
           ))}

@@ -1,30 +1,157 @@
 import { useEffect } from "react";
 
+// Cards that fade up as they scroll into view. Hero layers are excluded on purpose.
+const REVEAL = [
+  ".content .panel",
+  ".content .stat-card",
+  ".content .section-heading",
+  ".content .toolbar",
+  ".content .announcement",
+  ".content .project-card",
+  ".impact-strip article",
+  ".value",
+  ".steps li",
+  ".ticker",
+].join(",");
+
+const canHover = () => window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+const prefersReducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
 /**
- * Page-wide ambient behaviours: scroll progress bar and the cursor spotlight on
- * cards. (Reveal-on-scroll is pure CSS, see premium.css.)
+ * Page-wide ambient behaviours, all progressive enhancement:
+ *  - scroll progress bar and a navbar that condenses once the page scrolls
+ *  - cursor spotlight on cards, pointer parallax in the hero, magnetic buttons
+ *  - staggered reveal-on-scroll (an IntersectionObserver; content is plain
+ *    visible if it, or JavaScript, is unavailable)
  */
 export function useAmbient() {
   useEffect(() => {
     const bar = document.getElementById("scroll-progress");
-    const onScroll = () => {
+    let ticking = false;
+
+    const update = () => {
+      ticking = false;
       const max = document.documentElement.scrollHeight - window.innerHeight;
       if (bar) bar.style.transform = `scaleX(${max > 0 ? window.scrollY / max : 0})`;
+      document.querySelector(".topbar")?.toggleAttribute("data-scrolled", window.scrollY > 24);
     };
-    onScroll();
+
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(update);
+      }
+    };
+
+    update();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
   }, []);
 
   useEffect(() => {
-    const onMove = (event) => {
-      const card = event.target.closest?.(".panel, .stat-card, .value, .impact-strip article");
-      if (!card) return;
-      const rect = card.getBoundingClientRect();
-      card.style.setProperty("--mx", `${event.clientX - rect.left}px`);
-      card.style.setProperty("--my", `${event.clientY - rect.top}px`);
+    const fine = canHover();
+    let frame = 0;
+    let event;
+
+    const apply = () => {
+      frame = 0;
+      const { clientX: x, clientY: y, target } = event;
+
+      const card = target.closest?.(".panel, .stat-card, .value, .impact-strip article");
+      if (card) {
+        const rect = card.getBoundingClientRect();
+        card.style.setProperty("--mx", `${x - rect.left}px`);
+        card.style.setProperty("--my", `${y - rect.top}px`);
+      }
+
+      if (!fine || prefersReducedMotion()) return;
+
+      const hero = document.querySelector(".hero-x");
+      if (hero) {
+        const rect = hero.getBoundingClientRect();
+        const inside = y > rect.top && y < rect.bottom;
+        hero.style.setProperty("--px", inside ? ((x - rect.left) / rect.width - 0.5).toFixed(3) : "0");
+        hero.style.setProperty("--py", inside ? ((y - rect.top) / rect.height - 0.5).toFixed(3) : "0");
+      }
+
+      document.querySelectorAll("[data-magnetic]").forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        const dx = x - (rect.left + rect.width / 2);
+        const dy = y - (rect.top + rect.height / 2);
+        const near = Math.hypot(dx, dy) < Math.max(rect.width, rect.height) * 0.9;
+        el.style.setProperty("--tx", near ? `${(dx * 0.16).toFixed(1)}px` : "0px");
+        el.style.setProperty("--ty", near ? `${(dy * 0.22).toFixed(1)}px` : "0px");
+      });
     };
+
+    const onMove = (e) => {
+      event = e;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
+
     window.addEventListener("pointermove", onMove, { passive: true });
-    return () => window.removeEventListener("pointermove", onMove);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!("IntersectionObserver" in window) || prefersReducedMotion()) return undefined;
+
+    const seen = new WeakSet();
+    const timers = new Set();
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const el = entry.target;
+          io.unobserve(el);
+          el.dataset.rv = "in";
+          // Hand transitions back to the element's own hover styles once revealed.
+          const timer = setTimeout(() => {
+            delete el.dataset.rv;
+            el.style.removeProperty("--rv-i");
+            timers.delete(timer);
+          }, 1100);
+          timers.add(timer);
+        }
+      },
+      { threshold: 0.08, rootMargin: "0px 0px -6% 0px" }
+    );
+
+    const register = (root) => {
+      const found = root.matches?.(REVEAL) ? [root, ...root.querySelectorAll(REVEAL)] : root.querySelectorAll?.(REVEAL) || [];
+      let order = 0;
+
+      for (const el of found) {
+        if (seen.has(el) || el.closest(".hero-x, .auth-modal, .toast-stack")) continue;
+        seen.add(el);
+        el.dataset.rv = "out";
+        el.style.setProperty("--rv-i", String(Math.min(order, 5)));
+        order += 1;
+        io.observe(el);
+      }
+    };
+
+    register(document.body);
+
+    const mo = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) if (node.nodeType === 1) register(node);
+      }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      mo.disconnect();
+      io.disconnect();
+      timers.forEach(clearTimeout);
+    };
   }, []);
 }

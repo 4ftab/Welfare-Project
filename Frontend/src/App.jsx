@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DonationReport from "./DonationReport";
 import AdminPanel from "./components/AdminPanel";
 import { CountUp, DonutChart, ProgressBar, TrendChart } from "./components/Charts";
 import { Confetti, Ring } from "./components/Effects";
+import { Glyph, Icon } from "./components/Glyphs";
+import { glyphFor } from "./components/glyphRules";
+import Village from "./components/Village";
 import { useAmbient } from "./useAmbient";
 import { useLanguage } from "./LanguageContext";
 import {
@@ -21,6 +24,19 @@ import {
 const PAGES = ["home", "dashboard", "donate", "projects", "announcements", "report", "profile", "admin"];
 const PRESETS = [500, 1000, 2500, 5000, 10000];
 
+// Headline split into words so each one can rise into place with a stagger (--i).
+function Words({ text, start = 0, className = "" }) {
+  return (
+    <span className={`words ${className}`}>
+      {text.split(" ").map((word, i) => (
+        <Fragment key={i}>
+          <span className="w" style={{ "--i": start + i }}><span>{word}</span></span>{" "}
+        </Fragment>
+      ))}
+    </span>
+  );
+}
+
 function pageFromHash() {
   const key = window.location.hash.replace("#/", "").replace("#", "");
   return PAGES.includes(key) ? key : "home";
@@ -34,9 +50,12 @@ export default function App() {
   const [token, setToken] = useState(() => sessionStorage.getItem("welfare_token") || "");
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(() => Boolean(sessionStorage.getItem("welfare_token")));
+  // True once the signed-in user is known, so later token changes refresh data quietly instead of blanking the page.
+  const hasSession = useRef(false);
 
   const [mode, setMode] = useState("login");
   const [authOpen, setAuthOpen] = useState(false);
+  const [authLeaving, setAuthLeaving] = useState(false);
   const [authError, setAuthError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -76,8 +95,15 @@ export default function App() {
 
   const pushToast = useCallback((type, text) => {
     const id = Date.now() + Math.random();
+    const ttl = type === "error" ? 6500 : 4200;
     setToasts((list) => [...list.slice(-3), { id, type, text }]);
-    setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), type === "error" ? 6500 : 4200);
+    setTimeout(() => setToasts((list) => list.map((t) => (t.id === id ? { ...t, leaving: true } : t))), ttl - 260);
+    setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), ttl);
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts((list) => list.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
+    setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 240);
   }, []);
 
   const notify = useCallback((text) => pushToast("success", text), [pushToast]);
@@ -116,8 +142,12 @@ export default function App() {
 
   function closeAuth() {
     if (busy) return;
-    setAuthOpen(false);
-    setAuthError("");
+    setAuthLeaving(true);
+    setTimeout(() => {
+      setAuthOpen(false);
+      setAuthLeaving(false);
+      setAuthError("");
+    }, 190);
   }
 
   useEffect(() => {
@@ -193,9 +223,10 @@ export default function App() {
 
   useEffect(() => {
     if (token) {
-      setAuthLoading(true);
-      loadDashboard(token);
+      if (!hasSession.current) setAuthLoading(true);
+      loadDashboard(token).finally(() => { hasSession.current = true; });
     } else {
+      hasSession.current = false;
       setAuthLoading(false);
     }
   }, [token, loadDashboard]);
@@ -287,6 +318,7 @@ export default function App() {
 
       pendingAuth.current = null;
       sessionStorage.setItem("welfare_token", result.token);
+      hasSession.current = true;
       setUser(result.user);
       setToken(result.token);
       setAuthOpen(false);
@@ -484,14 +516,14 @@ export default function App() {
   const isAdmin = user?.role === "admin";
 
   const navItems = [
-    { key: "home", label: tr("Home", "ہوم"), icon: "⌂" },
-    ...(user ? [{ key: "dashboard", label: tr("My dashboard", "میرا ڈیش بورڈ"), icon: "◎" }] : []),
-    { key: "projects", label: tr("Welfare Projects", "فلاحی منصوبے"), icon: "◇" },
-    { key: "announcements", label: tr("Announcements", "اعلانات"), icon: "◉" },
-    { key: "report", label: tr("Financial Reports", "مالیاتی رپورٹس"), icon: "▤" },
-    { key: "donate", label: tr("Donate", "عطیہ دیں"), icon: "♡" },
-    ...(user ? [{ key: "profile", label: tr("My profile", "میری پروفائل"), icon: "☺" }] : []),
-    ...(isAdmin ? [{ key: "admin", label: tr("Admin Console", "ایڈمن کنسول"), icon: "⚙" }] : []),
+    { key: "home", label: tr("Home", "ہوم"), icon: "home" },
+    ...(user ? [{ key: "dashboard", label: tr("My dashboard", "میرا ڈیش بورڈ"), icon: "dashboard" }] : []),
+    { key: "projects", label: tr("Welfare Projects", "فلاحی منصوبے"), icon: "projects" },
+    { key: "announcements", label: tr("Announcements", "اعلانات"), icon: "announcements" },
+    { key: "report", label: tr("Financial Reports", "مالیاتی رپورٹس"), icon: "report" },
+    { key: "donate", label: tr("Donate", "عطیہ دیں"), icon: "donate" },
+    ...(user ? [{ key: "profile", label: tr("My profile", "میری پروفائل"), icon: "profile" }] : []),
+    ...(isAdmin ? [{ key: "admin", label: tr("Admin Console", "ایڈمن کنسول"), icon: "admin" }] : []),
   ];
 
   const filteredProjects = useMemo(() => {
@@ -526,6 +558,13 @@ export default function App() {
     }));
   }, [myDonations]);
 
+  const budgetTotal = projects.filter((p) => p.status !== "cancelled").reduce((s, p) => s + Number(p.budget), 0);
+  const fundedPct = pct(stats?.total_raised, budgetTotal);
+
+  const amountNum = Number(selectedAmount);
+  const amountOk = Number.isInteger(amountNum) && amountNum >= 10 && amountNum <= 1000000;
+  const donateProjectTitle = projects.find((p) => String(p.id) === String(donateProject))?.title;
+
   const featured = projects.filter((p) => p.status === "ongoing" || p.status === "planned").slice(0, 3);
 
   const trendLabels = {
@@ -549,7 +588,11 @@ export default function App() {
     const accepting = project.status === "planned" || project.status === "ongoing";
     return (
       <article className="panel project-card" key={project.id}>
-        <span className={`status ${project.status}`}>{statusLabel(project.status)}</span>
+        <div className="project-art" data-tone={project.id % 4}>
+          <span className="art-glyph"><Glyph name={glyphFor(`${project.title} ${project.description || ""}`)} size={30} /></span>
+          <span className={`status ${project.status}`}>{statusLabel(project.status)}</span>
+        </div>
+        <div className="project-body">
         <h3>{project.title}</h3>
         <p>{project.description || tr("More project details will be shared soon.", "منصوبے کی مزید تفصیلات جلد شیئر کی جائیں گی۔")}</p>
         <p className="muted"><span aria-hidden="true">⌖</span> {project.location || "Chitta Batta"}
@@ -577,6 +620,7 @@ export default function App() {
             ♡ {tr("Support this project", "اس منصوبے کی مدد کریں")}
           </button>
         )}
+        </div>
       </article>
     );
   }
@@ -616,7 +660,7 @@ export default function App() {
         </a>
 
         <div className="top-actions">
-          <button className="button button-light" onClick={() => donateTo("")}>♡ {tr("Donate", "عطیہ")}</button>
+          <button className="button button-light nav-donate" data-magnetic onClick={() => donateTo("")}>♡ {tr("Donate", "عطیہ")}</button>
           <button type="button" className="button button-light" onClick={toggleLanguage} aria-label="Change website language">
             {isUrdu ? "English" : "اردو"}
           </button>
@@ -641,7 +685,7 @@ export default function App() {
 
           {navItems.map((item) => (
             <button key={item.key} className={`nav-item ${page === item.key ? "active" : ""}`} aria-current={page === item.key ? "page" : undefined} onClick={() => go(item.key)}>
-              <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+              <span className="nav-icon" aria-hidden="true"><Icon name={item.icon} /></span>
               <span className="nav-label">{item.label}</span>
               <span className="nav-arrow" aria-hidden="true">›</span>
             </button>
@@ -649,14 +693,14 @@ export default function App() {
 
           {!user && (
             <button className="nav-item" onClick={() => openAuth("login")}>
-              <span className="nav-icon" aria-hidden="true">↗</span>
+              <span className="nav-icon" aria-hidden="true"><Icon name="signin" /></span>
               <span className="nav-label">{tr("Sign in / Register", "لاگ اِن / رجسٹریشن")}</span>
               <span className="nav-arrow" aria-hidden="true">›</span>
             </button>
           )}
 
           <div className="sidebar-note">
-            <div className="trust-icon">✓</div>
+            <div className="trust-icon"><Icon name="check" size={18} /></div>
             <strong>{tr("Built on trust", "اعتماد کی بنیاد پر")}</strong>
             <p>{tr("Clear records help the community understand how contributions are recorded and spent.", "شفاف ریکارڈ کمیونٹی کو یہ سمجھنے میں مدد دیتا ہے کہ عطیات کیسے درج اور خرچ کیے جاتے ہیں۔")}</p>
             {stats && <p className="sidebar-stat">{tr("Raised so far", "اب تک جمع")}: <strong>PKR {compactMoney(stats.total_raised)}</strong></p>}
@@ -672,46 +716,46 @@ export default function App() {
                 <div className="hero-pattern" aria-hidden="true" />
 
                 <div className="hero-copy">
-                  <span className="pill"><span className="pulse" />{tr("Live · open books · community-led", "براہِ راست · کھلا حساب · کمیونٹی کی قیادت")}</span>
+                  <span className="pill hero-in" style={{ "--i": 0 }}><span className="pulse" />{tr("Live · open books · community-led", "براہِ راست · کھلا حساب · کمیونٹی کی قیادت")}</span>
                   <h1>
-                    {tr("Small contributions.", "چھوٹا سا تعاون۔")}
+                    <Words text={tr("Small contributions.", "چھوٹا سا تعاون۔")} start={1} />
                     <br />
-                    <span className="grad-text">{tr("Meaningful change.", "بامعنی تبدیلی۔")}</span>
+                    <Words className="grad-text" text={tr("Meaningful change.", "بامعنی تبدیلی۔")} start={4} />
                   </h1>
-                  <p>{tr("Supporting welfare initiatives in Chitta Batta through community participation, responsible record keeping, and financial transparency.", "چھٹہ بٹہ میں کمیونٹی کی شرکت، ذمہ دارانہ ریکارڈ اور مالی شفافیت کے ذریعے فلاحی سرگرمیوں کی مدد کرنا۔")}</p>
-                  <div className="hero-actions">
-                    <button className="button button-primary" onClick={() => donateTo("")}>♡ {tr("Donate now", "ابھی عطیہ دیں")}</button>
-                    {user ? (
-                      <button className="button button-ghost" onClick={() => go("dashboard")}>{tr("Open my dashboard", "میرا ڈیش بورڈ")} →</button>
-                    ) : (
-                      <button className="button button-ghost" onClick={() => openAuth("register")}>{tr("Become a donor", "عطیہ دہندہ بنیں")} →</button>
-                    )}
+                  <p className="hero-in" style={{ "--i": 6 }}>{tr("Supporting welfare initiatives in Chitta Batta through community participation, responsible record keeping, and financial transparency.", "چھٹہ بٹہ میں کمیونٹی کی شرکت، ذمہ دارانہ ریکارڈ اور مالی شفافیت کے ذریعے فلاحی سرگرمیوں کی مدد کرنا۔")}</p>
+                  <div className="hero-actions hero-in" style={{ "--i": 7 }}>
+                    <button className="button button-gold" data-magnetic onClick={() => donateTo("")}>♡ {tr("Donate now", "ابھی عطیہ دیں")}</button>
+                    <button className="button button-ghost" data-magnetic onClick={() => go("projects")}>{tr("Explore our projects", "ہمارے منصوبے دیکھیں")} →</button>
                   </div>
-                  <ul className="trust-row">
-                    <li><span aria-hidden="true">🔒</span>{config.online_payments ? tr("Secure checkout by Safepay", "Safepay کے ذریعے محفوظ ادائیگی") : tr("Pledge in seconds", "چند سیکنڈ میں عطیہ")}</li>
-                    <li><span aria-hidden="true">◈</span>{tr("Public monthly reports", "عوامی ماہانہ رپورٹس")}</li>
-                    <li><span aria-hidden="true">文</span>{tr("English & Urdu", "انگریزی اور اردو")}</li>
+                  <ul className="trust-row hero-in" style={{ "--i": 8 }}>
+                    <li><span aria-hidden="true"><Icon name="lock" size={13} /></span>{config.online_payments ? tr("Secure checkout by Safepay", "Safepay کے ذریعے محفوظ ادائیگی") : tr("Pledge in seconds", "چند سیکنڈ میں عطیہ")}</li>
+                    <li><span aria-hidden="true"><Icon name="report" size={13} /></span>{tr("Public monthly reports", "عوامی ماہانہ رپورٹس")}</li>
+                    <li><span aria-hidden="true"><Icon name="check" size={13} /></span>{tr("Only confirmed gifts are counted", "صرف تصدیق شدہ عطیات شمار ہوتے ہیں")}</li>
                   </ul>
                 </div>
 
                 <div className="hero-stage">
-                  <div className="hero-ring-card">
-                    <Ring value={pct(stats?.total_raised, projects.filter((p) => p.status !== "cancelled").reduce((s, p) => s + Number(p.budget), 0) || 0)}>
-                      <strong>{Math.round(pct(stats?.total_raised, projects.filter((p) => p.status !== "cancelled").reduce((s, p) => s + Number(p.budget), 0) || 0))}%</strong>
-                      <small>{tr("of project budgets funded", "منصوبوں کا بجٹ پورا")}</small>
+                  <div className="hero-scene hero-in" style={{ "--i": 3 }}>
+                    <Village />
+                    <span className="scene-tag"><span className="pulse" />{tr("Chitta Batta", "چھٹہ بٹہ")}</span>
+                  </div>
+                  <div className="hero-ring-card hero-in" style={{ "--i": 9 }}>
+                    <Ring size={112} stroke={10} value={fundedPct}>
+                      <strong>{Math.round(fundedPct)}%</strong>
                     </Ring>
                     <div className="ring-meta">
-                      <span>{tr("Raised so far", "اب تک جمع")}</span>
+                      <span>{tr("of project budgets funded", "منصوبوں کا بجٹ پورا")}</span>
                       <strong>PKR {compactMoney(stats?.total_raised)}</strong>
+                      <small>{tr("raised so far", "اب تک جمع")}</small>
                     </div>
                   </div>
-                  <div className="hero-glass g2">
+                  <div className="hero-glass g2 hero-in" style={{ "--i": 10 }}>
                     <small>{tr("Community donors", "عطیہ دہندگان")}</small>
-                    <strong>{stats?.donor_count ?? 0}</strong>
+                    <strong><CountUp value={stats?.donor_count} /></strong>
                   </div>
-                  <div className="hero-glass g3">
+                  <div className="hero-glass g3 hero-in" style={{ "--i": 11 }}>
                     <small>{tr("Active projects", "جاری منصوبے")}</small>
-                    <strong>{stats?.projects_ongoing ?? 0}</strong>
+                    <strong><CountUp value={stats?.projects_ongoing} /></strong>
                   </div>
                 </div>
               </section>
@@ -764,8 +808,8 @@ export default function App() {
                 <h2>{tr("Giving in three simple steps", "تین آسان مراحل میں عطیہ")}</h2>
                 <ol className="steps">
                   <li><span className="step-no">1</span><div><h3>{tr("Create an account", "اکاؤنٹ بنائیں")}</h3><p className="muted">{tr("Register free to keep your own donation history.", "اپنی عطیات کی تاریخ محفوظ رکھنے کے لیے مفت رجسٹر کریں۔")}</p></div></li>
-                  <li><span className="step-no">2</span><div><h3>{tr("Pledge your gift", "عطیہ درج کریں")}</h3><p className="muted">{tr("Choose an amount and, if you like, a specific project.", "رقم اور چاہیں تو کوئی مخصوص منصوبہ منتخب کریں۔")}</p></div></li>
-                  <li><span className="step-no">3</span><div><h3>{tr("See it counted", "اسے شمار ہوتا دیکھیں")}</h3><p className="muted">{tr("Once received, an administrator confirms it and it appears in the public reports.", "رقم ملنے پر ایڈمن تصدیق کرتا ہے اور یہ عوامی رپورٹس میں شامل ہو جاتی ہے۔")}</p></div></li>
+                  <li><span className="step-no">2</span><div><h3>{config.online_payments ? tr("Give securely", "محفوظ طریقے سے عطیہ دیں") : tr("Pledge your gift", "عطیہ درج کریں")}</h3><p className="muted">{config.online_payments ? tr("Choose an amount and a project, then pay on Safepay's secure page.", "رقم اور منصوبہ منتخب کریں، پھر Safepay کے محفوظ صفحے پر ادائیگی کریں۔") : tr("Choose an amount and, if you like, a specific project.", "رقم اور چاہیں تو کوئی مخصوص منصوبہ منتخب کریں۔")}</p></div></li>
+                  <li><span className="step-no">3</span><div><h3>{tr("See it counted", "اسے شمار ہوتا دیکھیں")}</h3><p className="muted">{config.online_payments ? tr("Once Safepay confirms your payment it is counted automatically and appears in the public reports.", "Safepay کی تصدیق کے بعد آپ کا عطیہ خود بخود شمار ہوتا ہے اور عوامی رپورٹس میں شامل ہو جاتا ہے۔") : tr("Once received, an administrator confirms it and it appears in the public reports.", "رقم ملنے پر ایڈمن تصدیق کرتا ہے اور یہ عوامی رپورٹس میں شامل ہو جاتی ہے۔")}</p></div></li>
                 </ol>
               </section>
 
@@ -812,7 +856,7 @@ export default function App() {
                 <span className="eyebrow">FAQ</span>
                 <h2>{tr("Questions, answered", "آپ کے سوالات")}</h2>
                 <div className="faq">
-                  <details><summary>{tr("How do I know my donation was received?", "مجھے کیسے پتا چلے گا کہ میرا عطیہ موصول ہوگیا؟")}</summary><p className="muted">{tr("Your pledge first appears as pending in your dashboard. After the committee receives the funds, an administrator marks it completed, and it then counts in the public reports.", "آپ کا عطیہ پہلے ڈیش بورڈ میں زیرِ التوا نظر آتا ہے۔ کمیٹی کو رقم ملنے کے بعد ایڈمن اسے مکمل کر دیتا ہے اور پھر وہ عوامی رپورٹس میں شامل ہوتا ہے۔")}</p></details>
+                  <details><summary>{tr("How do I know my donation was received?", "مجھے کیسے پتا چلے گا کہ میرا عطیہ موصول ہوگیا؟")}</summary><p className="muted">{config.online_payments ? tr("Your gift shows as pending until Safepay confirms the payment. Then it turns completed in your dashboard and counts in the public reports. You can press “Check status” at any time.", "Safepay کی تصدیق تک آپ کا عطیہ زیرِ التوا رہتا ہے۔ پھر وہ ڈیش بورڈ میں مکمل ہو جاتا ہے اور عوامی رپورٹس میں شمار ہوتا ہے۔ آپ کسی بھی وقت ”حیثیت چیک کریں“ دبا سکتے ہیں۔") : tr("Your pledge first appears as pending in your dashboard. After the committee receives the funds, an administrator marks it completed, and it then counts in the public reports.", "آپ کا عطیہ پہلے ڈیش بورڈ میں زیرِ التوا نظر آتا ہے۔ کمیٹی کو رقم ملنے کے بعد ایڈمن اسے مکمل کر دیتا ہے اور پھر وہ عوامی رپورٹس میں شامل ہوتا ہے۔")}</p></details>
                   <details><summary>{tr("Can I support a specific project?", "کیا میں کسی مخصوص منصوبے کی مدد کر سکتا ہوں؟")}</summary><p className="muted">{tr("Yes. Pick a project on the donation form, or press “Support this project” on any project card.", "جی ہاں۔ عطیہ فارم میں منصوبہ منتخب کریں یا کسی بھی منصوبے کے کارڈ پر ”اس منصوبے کی مدد کریں“ دبائیں۔")}</p></details>
                   <details><summary>{tr("Who can see my donation details?", "میرے عطیات کی تفصیل کون دیکھ سکتا ہے؟")}</summary><p className="muted">{tr("Only you and the committee administrators. Public reports show totals only, never donor names.", "صرف آپ اور کمیٹی کے ایڈمنز۔ عوامی رپورٹس میں صرف مجموعی رقم ہوتی ہے، عطیہ دہندہ کا نام نہیں۔")}</p></details>
                   <details><summary>{tr("Can I download a statement?", "کیا میں اپنا اسٹیٹمنٹ ڈاؤن لوڈ کر سکتا ہوں؟")}</summary><p className="muted">{tr("Yes. Your dashboard has a PDF donation report you can download or print.", "جی ہاں۔ آپ کے ڈیش بورڈ پر PDF رپورٹ موجود ہے جسے ڈاؤن لوڈ یا پرنٹ کیا جا سکتا ہے۔")}</p></details>
@@ -893,17 +937,17 @@ export default function App() {
                         <button key={s} className={`chip ${donationFilter === s ? "active" : ""}`} onClick={() => setDonationFilter(s)}>{s}</button>
                       ))}
                     </div>
-                    <div className="table-wrap">
+                    <div className="table-wrap stack">
                       <table>
                         <thead><tr><th>{tr("Date", "تاریخ")}</th><th>{tr("Amount", "رقم")}</th><th>{tr("Project", "منصوبہ")}</th><th>{tr("Method", "طریقہ")}</th><th>{tr("Status", "حیثیت")}</th><th /></tr></thead>
                         <tbody>
                           {filteredMyDonations.map((item) => (
                             <tr key={item.id}>
-                              <td>{formatDate(item.donation_date)}</td>
-                              <td>{money(item.amount)}</td>
-                              <td>{item.project_title || tr("General fund", "عمومی فنڈ")}</td>
-                              <td>{methodLabel(item.payment_method, item.payment_channel)}</td>
-                              <td><span className={`status ${item.payment_status}`}>{item.payment_status}</span></td>
+                              <td data-label={tr("Date", "تاریخ")}>{formatDate(item.donation_date)}</td>
+                              <td data-label={tr("Amount", "رقم")}>{money(item.amount)}</td>
+                              <td data-label={tr("Project", "منصوبہ")}>{item.project_title || tr("General fund", "عمومی فنڈ")}</td>
+                              <td data-label={tr("Method", "طریقہ")}>{methodLabel(item.payment_method, item.payment_channel)}</td>
+                              <td data-label={tr("Status", "حیثیت")}><span className={`status ${item.payment_status}`}>{item.payment_status}</span></td>
                               <td className="row-actions">
                                 {item.payment_status === "pending" && config.online_payments && item.payment_method === "safepay" && (
                                   <>
@@ -915,7 +959,16 @@ export default function App() {
                               </td>
                             </tr>
                           ))}
-                          {!filteredMyDonations.length && <tr><td colSpan="6">{tr("No donation records yet. Your contributions will appear here.", "ابھی عطیات کا کوئی ریکارڈ نہیں۔ آپ کے عطیات یہاں دکھائی دیں گے۔")}</td></tr>}
+                          {!filteredMyDonations.length && (
+                            <tr className="empty-row"><td colSpan="6">
+                              <div className="empty-state">
+                                <span className="empty-icon"><Glyph name="donate" size={26} /></span>
+                                <strong>{myDonations.length ? tr("Nothing matches this filter", "اس فلٹر سے کچھ نہیں ملا") : tr("Your giving story starts here", "آپ کی خدمت کی کہانی یہاں سے شروع ہوتی ہے")}</strong>
+                                <p className="muted">{myDonations.length ? tr("Try another status above.", "اوپر سے کوئی اور حیثیت منتخب کریں۔") : tr("Your contributions will appear here, with their payment status.", "آپ کے عطیات ادائیگی کی حیثیت کے ساتھ یہاں دکھائی دیں گے۔")}</p>
+                                {!myDonations.length && <button className="button button-primary mini" onClick={() => donateTo("")}>♡ {tr("Make your first donation", "پہلا عطیہ دیں")}</button>}
+                              </div>
+                            </td></tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -961,7 +1014,7 @@ export default function App() {
                         : tr("This form creates a pending pledge and does not charge your card. An administrator marks it completed once the funds are received.", "یہ فارم زیرِ التوا عطیہ بناتا ہے اور آپ کے کارڈ سے رقم نہیں کاٹتا۔ رقم موصول ہونے پر ایڈمن اسے مکمل کر دیتا ہے۔")}
                     </p>
                     {config.online_payments && config.sandbox && (
-                      <p className="sandbox-note"><span aria-hidden="true">⚠</span> {tr("Test mode: payments use Safepay's sandbox, so no real money moves. Use Safepay's test card.", "ٹیسٹ موڈ: ادائیگیاں Safepay کے سینڈ باکس پر ہوتی ہیں، اصل رقم منتقل نہیں ہوتی۔")}</p>
+                      <p className="sandbox-note"><Icon name="alert" size={16} /> {tr("Test mode: payments use Safepay's sandbox, so no real money moves. Use Safepay's test card.", "ٹیسٹ موڈ: ادائیگیاں Safepay کے سینڈ باکس پر ہوتی ہیں، اصل رقم منتقل نہیں ہوتی۔")}</p>
                     )}
                     <form onSubmit={createDonation} className="donate-form">
                       <fieldset>
@@ -975,8 +1028,13 @@ export default function App() {
                         </div>
                         <label className="custom-amount">
                           {tr("Or enter another amount", "یا کوئی اور رقم درج کریں")}
-                          <input name="amount" type="number" min="10" max="1000000" step="1" value={selectedAmount} onChange={(e) => setSelectedAmount(e.target.value)} placeholder={tr("Enter amount", "رقم درج کریں")} required />
+                          <input name="amount" type="number" min="10" max="1000000" step="1" inputMode="numeric" value={selectedAmount} onChange={(e) => setSelectedAmount(e.target.value)} placeholder={tr("Enter amount", "رقم درج کریں")} required aria-invalid={selectedAmount !== "" && !amountOk} aria-describedby="amount-help" />
                         </label>
+                        <small id="amount-help" className={`field-help ${selectedAmount !== "" && !amountOk ? "bad" : ""}`} role={selectedAmount !== "" && !amountOk ? "alert" : undefined}>
+                          {selectedAmount !== "" && !amountOk
+                            ? tr("Enter a whole number of rupees between 10 and 1,000,000.", "10 سے 10,00,000 کے درمیان پوری رقم روپوں میں درج کریں۔")
+                            : tr("Whole rupees, from PKR 10 up to PKR 1,000,000.", "پوری رقم روپوں میں، کم از کم 10 اور زیادہ سے زیادہ 10,00,000۔")}
+                        </small>
                       </fieldset>
 
                       {config.online_payments && (config.channels || []).length > 1 && (
@@ -1003,7 +1061,14 @@ export default function App() {
 
                       <label>{tr("Note (optional)", "نوٹ (اختیاری)")}<input name="note" maxLength="255" placeholder={tr("e.g. in memory of…", "مثلاً کسی کی یاد میں…")} /></label>
 
-                      <button className="button button-primary pay-btn" type="submit" disabled={paying}>
+                      <div className="donate-summary" aria-live="polite">
+                        <div className="sum-row"><span>{tr("Your gift", "آپ کا عطیہ")}</span><strong className="sum-amount">{amountOk ? money(amountNum) : "—"}</strong></div>
+                        <div className="sum-row"><span>{tr("Goes to", "کہاں جائے گا")}</span><strong>{donateProjectTitle || tr("General fund", "عمومی فنڈ")}</strong></div>
+                        <div className="sum-row"><span>{tr("Paid with", "ادائیگی")}</span><strong>{config.online_payments ? `Safepay · ${CHANNEL_NAMES[channel] || channel}` : tr("Pledge (no payment now)", "عہد (ابھی ادائیگی نہیں)")}</strong></div>
+                        <p className="muted">{config.online_payments ? tr("You'll review and pay on Safepay's secure page. Your card details never touch this website.", "آپ Safepay کے محفوظ صفحے پر ادائیگی کا جائزہ لے کر مکمل کریں گے۔ آپ کے کارڈ کی تفصیلات اس ویب سائٹ تک نہیں پہنچتیں۔") : tr("No money is taken now. The committee will confirm once the funds are received.", "ابھی کوئی رقم نہیں لی جاتی۔ رقم موصول ہونے پر کمیٹی تصدیق کرے گی۔")}</p>
+                      </div>
+
+                      <button className="button button-primary pay-btn" type="submit" disabled={paying || !amountOk}>
                         {config.online_payments ? <>🔒 {tr("Continue to secure payment", "محفوظ ادائیگی کی طرف بڑھیں")}</> : <>♡ {tr("Create pledge", "عطیہ درج کریں")}</>}
                         {selectedAmount ? ` · ${money(selectedAmount)}` : ""}
                       </button>
@@ -1020,6 +1085,11 @@ export default function App() {
                   <li><span>{tr("Projects running", "جاری منصوبے")}</span><strong>{stats?.projects_ongoing ?? 0}</strong></li>
                 </ul>
                 <p className="muted">{tr("Every donation is recorded, reported monthly, and spent only on documented community needs.", "ہر عطیہ درج ہوتا ہے، ماہانہ رپورٹ میں شامل ہوتا ہے اور صرف دستاویزی کمیونٹی ضرورتوں پر خرچ ہوتا ہے۔")}</p>
+                <ul className="assurances">
+                  {config.online_payments && <li><Icon name="lock" size={16} /><span>{tr("Payment happens on Safepay's hosted page. We never see your card.", "ادائیگی Safepay کے محفوظ صفحے پر ہوتی ہے۔ ہم آپ کا کارڈ نہیں دیکھتے۔")}</span></li>}
+                  <li><Icon name="check" size={16} /><span>{config.online_payments ? tr("A gift counts only after Safepay confirms it.", "عطیہ Safepay کی تصدیق کے بعد ہی شمار ہوتا ہے۔") : tr("A gift counts once the committee confirms it.", "عطیہ کمیٹی کی تصدیق کے بعد شمار ہوتا ہے۔")}</span></li>
+                  <li><Icon name="report" size={16} /><span>{tr("Confirmed gifts appear in the monthly report. Donor names stay private.", "تصدیق شدہ عطیات ماہانہ رپورٹ میں شامل ہوتے ہیں۔ عطیہ دہندگان کے نام خفیہ رہتے ہیں۔")}</span></li>
+                </ul>
               </aside>
             </div>
           )}
@@ -1066,10 +1136,17 @@ export default function App() {
               </div>
               {filteredAnnouncements.map((item) => (
                 <article className="panel announcement" key={item.id}>
-                  <span className="eyebrow">{tr("COMMUNITY UPDATE", "کمیونٹی اپ ڈیٹ")}</span>
-                  <h3>{item.title}</h3>
-                  <p>{item.body}</p>
-                  <small className="muted">{tr("Published", "شائع ہوا")}: {formatDate(item.created_at)}</small>
+                  <time className="ann-date" dateTime={item.created_at}>
+                    <b>{new Date(item.created_at).getDate() || "—"}</b>
+                    <span>{new Date(item.created_at).toLocaleDateString("en-GB", { month: "short" })}</span>
+                    <small>{new Date(item.created_at).getFullYear() || ""}</small>
+                  </time>
+                  <div className="ann-body">
+                    <span className="eyebrow">{tr("COMMUNITY UPDATE", "کمیونٹی اپ ڈیٹ")}</span>
+                    <h3>{item.title}</h3>
+                    <p>{item.body}</p>
+                    <small className="muted">{tr("Published", "شائع ہوا")}: {formatDate(item.created_at)}</small>
+                  </div>
                 </article>
               ))}
               {!filteredAnnouncements.length && (
@@ -1098,14 +1175,23 @@ export default function App() {
                   <button className="button button-light" onClick={() => setMonth(currentMonth())}>{tr("This month", "یہ مہینہ")}</button>
                 </div>
 
+                {!report && (
+                  <div aria-busy="true" aria-label={tr("Loading report", "رپورٹ لوڈ ہو رہی ہے")}>
+                    <div className="skeleton-line wide" /><div className="skeleton-line" /><div className="skeleton-line" />
+                  </div>
+                )}
+
                 {report && (
                   <>
                     <h3 className="report-title">{monthLabel(report.month, true)}</h3>
                     <div className="stats-grid four report-grid">
-                      <article className="stat-card"><span>{tr("Opening balance", "ابتدائی بیلنس")}</span><strong>{money(report.opening_balance)}</strong></article>
-                      <article className="stat-card"><span>{tr("Donations received", "وصول شدہ عطیات")}</span><strong>{money(report.donations_received)}</strong><small>{report.donation_count} {tr("records", "ریکارڈ")}</small></article>
-                      <article className="stat-card"><span>{tr("Expenses paid", "ادا شدہ اخراجات")}</span><strong>{money(report.expenses_paid)}</strong><small>{report.expense_count} {tr("records", "ریکارڈ")}</small></article>
-                      <article className="stat-card"><span>{tr("Closing balance", "اختتامی بیلنس")}</span><strong>{money(report.closing_balance)}</strong></article>
+                      <article className="stat-card opening"><span>{tr("Opening balance", "ابتدائی بیلنس")}</span><strong>{money(report.opening_balance)}</strong></article>
+                      <i className="op" aria-hidden="true">+</i>
+                      <article className="stat-card donations"><span>{tr("Donations received", "وصول شدہ عطیات")}</span><strong>{money(report.donations_received)}</strong><small>{report.donation_count} {report.donation_count === 1 ? tr("record", "ریکارڈ") : tr("records", "ریکارڈ")}</small></article>
+                      <i className="op" aria-hidden="true">−</i>
+                      <article className="stat-card expenses"><span>{tr("Expenses paid", "ادا شدہ اخراجات")}</span><strong>{money(report.expenses_paid)}</strong><small>{report.expense_count} {report.expense_count === 1 ? tr("record", "ریکارڈ") : tr("records", "ریکارڈ")}</small></article>
+                      <i className="op" aria-hidden="true">=</i>
+                      <article className="stat-card closing"><span>{tr("Closing balance", "اختتامی بیلنس")}</span><strong>{money(report.closing_balance)}</strong></article>
                     </div>
 
                     <div className="flow">
@@ -1194,9 +1280,13 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        <div>
-          <strong>{tr("Nojawan Itehad Welfare", "نوجوان اتحاد ویلفیئر")}</strong>
-          <span>{tr("Community welfare · Chitta Batta", "کمیونٹی ویلفیئر · چھٹہ بٹہ")}</span>
+        <div className="footer-brand">
+          <span className="brand-mark" aria-hidden="true">NI</span>
+          <div>
+            <strong>{tr("Nojawan Itehad Welfare", "نوجوان اتحاد ویلفیئر")}</strong>
+            <span>{tr("Community welfare · Chitta Batta", "کمیونٹی ویلفیئر · چھٹہ بٹہ")}</span>
+            <small>{tr("Every confirmed rupee is reported openly.", "ہر تصدیق شدہ روپیہ کھلے عام رپورٹ ہوتا ہے۔")}</small>
+          </div>
         </div>
         <nav className="footer-links" aria-label="Footer">
           <button onClick={() => go("projects")}>{tr("Projects", "منصوبے")}</button>
@@ -1206,20 +1296,24 @@ export default function App() {
         </nav>
       </footer>
 
+      {page !== "donate" && !authOpen && (
+        <button type="button" className="button button-gold mobile-donate" onClick={() => donateTo("")}>♡ {tr("Donate", "عطیہ دیں")}</button>
+      )}
+
       {/* Toasts */}
       <div className="toast-stack" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.type}`} role={t.type === "error" ? "alert" : "status"}>
+          <div key={t.id} className={`toast ${t.type}${t.leaving ? " leaving" : ""}`} role={t.type === "error" ? "alert" : "status"}>
             <span aria-hidden="true">{t.type === "error" ? "!" : "✓"}</span>
             <p>{t.text}</p>
-            <button aria-label="Dismiss" onClick={() => setToasts((list) => list.filter((x) => x.id !== t.id))}>×</button>
+            <button aria-label="Dismiss" onClick={() => dismissToast(t.id)}>×</button>
           </div>
         ))}
       </div>
 
       {/* Sign in / Register modal */}
       {authOpen && (
-        <div className="auth-modal-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAuth(); }}>
+        <div className={`auth-modal-overlay${authLeaving ? " leaving" : ""}`} onMouseDown={(event) => { if (event.target === event.currentTarget) closeAuth(); }}>
           <section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
             <button type="button" className="auth-modal-close" onClick={closeAuth} disabled={busy} aria-label="Close sign in dialog">×</button>
 

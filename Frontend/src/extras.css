@@ -251,7 +251,7 @@
   color: #fff;
   font-family: 'Manrope', sans-serif;
   font-weight: 800;
-  background: linear-gradient(135deg, #0aa67c, #3b82f6);
+  background: linear-gradient(135deg, #0aa67c, #11b3b0);
   box-shadow: 0 8px 18px rgba(8, 127, 91, 0.2);
 }
 
@@ -294,7 +294,7 @@
   display: block;
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, #0aa67c, #3b82f6);
+  background: linear-gradient(90deg, #0aa67c, #11b3b0);
   transition: width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
   animation: growX 1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   transform-origin: left center;
@@ -859,7 +859,7 @@ td .mini-select {
   border-radius: 50%;
   color: #fff;
   font-size: 32px;
-  background: linear-gradient(135deg, #0aa67c, #3b82f6);
+  background: linear-gradient(135deg, #0aa67c, #11b3b0);
   box-shadow: 0 0 0 10px rgba(10, 166, 124, 0.12);
   animation: pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
@@ -872,7 +872,7 @@ td .mini-select {
 .impact-side {
   position: sticky;
   top: 98px;
-  background: linear-gradient(160deg, #effbf4, #eef6ff);
+  background: linear-gradient(160deg, #effbf4, #fbf4de);
 }
 
 .form-grid.single {
@@ -891,7 +891,7 @@ td .mini-select {
   overflow: hidden;
   border-radius: 18px;
   color: #fff;
-  background: linear-gradient(125deg, #064b3b, #087e80 55%, #3975dc);
+  background: linear-gradient(125deg, #064b3b, #087e80 55%, #12a89d);
   box-shadow: 0 16px 34px rgba(6, 89, 91, 0.2);
 }
 

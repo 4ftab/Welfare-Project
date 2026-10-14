@@ -13,7 +13,7 @@ export function Ring({ value, size = 168, stroke = 13, children }) {
           <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#7ef0c4" />
             <stop offset="55%" stopColor="#4fd1d9" />
-            <stop offset="100%" stopColor="#8ab4ff" />
+            <stop offset="100%" stopColor="#f3d27a" />
           </linearGradient>
         </defs>
         <circle cx={size / 2} cy={size / 2} r={radius} className="ring-track" strokeWidth={stroke} fill="none" />
@@ -51,7 +51,7 @@ export function Confetti({ burst }) {
     canvas.height = window.innerHeight * dpr;
     ctx.scale(dpr, dpr);
 
-    const colors = ["#0aa67c", "#3b82f6", "#f5b942", "#12a89d", "#ef6b6b", "#8b5cf6"];
+    const colors = ["#0aa67c", "#e0b04a", "#12a89d", "#f3d27a", "#c97b4a", "#6b8f71"];
     const pieces = Array.from({ length: 150 }, () => ({
       x: window.innerWidth / 2 + (Math.random() - 0.5) * 220,
       y: window.innerHeight * 0.38,

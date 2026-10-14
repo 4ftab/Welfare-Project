@@ -87,7 +87,8 @@ const CHANNEL_NAMES = { card: "Card", easypaisa: "Easypaisa", jazzcash: "JazzCas
 
 // "safepay · Easypaisa" style label for a donation row.
 export function methodLabel(method, channel) {
-  const base = String(method || "").replace("_", " ");
+  const raw = String(method || "").replace("_", " ");
+  const base = raw.charAt(0).toUpperCase() + raw.slice(1);
   return method === "safepay" && channel ? `${base} · ${CHANNEL_NAMES[channel] || channel}` : base;
 }
 
