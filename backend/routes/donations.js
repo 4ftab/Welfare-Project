@@ -1,4 +1,3 @@
-
 const express = require("express");
 const db = require("../config/db");
 const {
@@ -7,16 +6,35 @@ const {
 } = require("../middleware/auth");
 
 const safepay = require("../services/safepay");
+const { reconcileDonation, closeDonation } = require("../services/payments");
 
 const router = express.Router();
 
-const FRONTEND = () => process.env.FRONTEND_URL || "http://localhost:5173";
+const FRONTEND = () =>
+  String(process.env.FRONTEND_URL || "http://localhost:5173").trim().replace(/\/+$/, "");
 
-// Creates (or reuses) a Safepay tracker for a pending donation and returns the hosted checkout URL.
-async function startCheckout(donationId, amount) {
+const MIN_AMOUNT = 10;
+const MAX_AMOUNT = 1000000;
+
+// A second identical request within this window reuses the first pledge (double-clicks, retries).
+const DUPLICATE_WINDOW_MINUTES = 10;
+
+const UNAVAILABLE = "Online payment is temporarily unavailable. Please try again later.";
+
+function checkoutFor(donationId, tracker) {
+  return safepay.checkoutUrl({
+    tracker,
+    orderId: `NIW-${donationId}`,
+    redirectUrl: `${FRONTEND()}/?payment=return&donation=${donationId}#/dashboard`,
+    cancelUrl: `${FRONTEND()}/?payment=cancel&donation=${donationId}#/dashboard`
+  });
+}
+
+// Reuses the donation's open Safepay tracker, or opens a new one, and returns the hosted checkout URL.
+async function resumeCheckout(donationId, amount) {
   const [existing] = await db.execute(
     `SELECT provider_transaction_id FROM payments
-     WHERE donation_id = ? AND status = 'pending'
+     WHERE donation_id = ? AND provider = 'safepay' AND status = 'pending'
      ORDER BY id DESC LIMIT 1`,
     [donationId]
   );
@@ -33,86 +51,16 @@ async function startCheckout(donationId, amount) {
     );
   }
 
-  return safepay.checkoutUrl({
-    tracker,
-    orderId: `NIW-${donationId}`,
-    redirectUrl: `${FRONTEND()}/?payment=return&donation=${donationId}#/dashboard`,
-    cancelUrl: `${FRONTEND()}/?payment=cancel&donation=${donationId}#/dashboard`
-  });
-}
-
-// Asks Safepay for the real tracker state and completes the donation if it was paid.
-async function reconcile(donationId) {
-  const [payments] = await db.execute(
-    `SELECT id, provider_transaction_id, amount FROM payments
-     WHERE donation_id = ? ORDER BY id DESC`,
-    [donationId]
-  );
-
-  for (const payment of payments) {
-    const { state, paid } = await safepay.getTrackerState(
-      payment.provider_transaction_id,
-      payment.amount
-    );
-
-    if (!paid) continue;
-
-    const connection = await db.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      await connection.execute(
-        "UPDATE payments SET status = 'completed' WHERE id = ?",
-        [payment.id]
-      );
-
-      const [updated] = await connection.execute(
-        `UPDATE donations
-         SET payment_status = 'completed',
-             transaction_reference = COALESCE(transaction_reference, ?),
-             donated_at = COALESCE(donated_at, NOW())
-         WHERE id = ? AND payment_status = 'pending'`,
-        [payment.provider_transaction_id, donationId]
-      );
-
-      if (updated.affectedRows) {
-        const [[donation]] = await connection.execute(
-          "SELECT user_id, amount FROM donations WHERE id = ?",
-          [donationId]
-        );
-
-        await connection.execute(
-          "INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)",
-          [
-            donation.user_id,
-            "SAFEPAY_PAYMENT_CONFIRMED",
-            `Donation ID ${donationId}; amount ${donation.amount}; tracker ${payment.provider_transaction_id}`
-          ]
-        );
-      }
-
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-
-    return { paid: true, state };
-  }
-
-  return { paid: false, state: "TRACKER_STARTED" };
+  return checkoutFor(donationId, tracker);
 }
 
 router.post("/", authenticateToken, async (req, res) => {
   try {
     const amount = Number(req.body.amount);
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isInteger(amount) || amount < MIN_AMOUNT || amount > MAX_AMOUNT) {
       return res.status(400).json({
-        message: "Amount must be greater than zero."
+        message: `Enter a whole amount between PKR ${MIN_AMOUNT} and PKR ${MAX_AMOUNT.toLocaleString("en-PK")}.`
       });
     }
 
@@ -120,6 +68,13 @@ router.post("/", authenticateToken, async (req, res) => {
       return res.status(400).json({
         message: "Online donations must use Safepay."
       });
+    }
+
+    const paymentMode = safepay.mode();
+
+    if (paymentMode === "invalid") {
+      console.error("Safepay configuration:", safepay.configProblems().join(" "));
+      return res.status(503).json({ message: UNAVAILABLE });
     }
 
     let projectId = null;
@@ -150,47 +105,103 @@ router.post("/", authenticateToken, async (req, res) => {
       });
     }
 
-    const [result] = await db.execute(
-      `INSERT INTO donations
-       (user_id, project_id, amount, payment_method, payment_status, note, payment_channel)
-       VALUES (?, ?, ?, 'safepay', 'pending', ?, ?)`,
-      [req.user.id, projectId, amount, note, channel]
+    // The same pledge submitted twice in a short time continues the first one.
+    const [recent] = await db.execute(
+      `SELECT id FROM donations
+       WHERE user_id = ? AND payment_method = 'safepay' AND payment_status = 'pending'
+         AND amount = ? AND project_id <=> ?
+         AND created_at > NOW() - INTERVAL ${DUPLICATE_WINDOW_MINUTES} MINUTE
+       ORDER BY id DESC LIMIT 1`,
+      [req.user.id, amount, projectId]
     );
 
-    const donationId = result.insertId;
+    if (paymentMode === "off") {
+      if (recent.length) {
+        return res.status(200).json({
+          message: "You already have this pledge pending.",
+          donation_id: recent[0].id,
+          amount,
+          payment_status: "pending",
+          checkout_url: null
+        });
+      }
 
-    if (!safepay.isConfigured()) {
+      const [result] = await db.execute(
+        `INSERT INTO donations
+         (user_id, project_id, amount, payment_method, payment_status, note, payment_channel)
+         VALUES (?, ?, ?, 'safepay', 'pending', ?, ?)`,
+        [req.user.id, projectId, amount, note, channel]
+      );
+
       return res.status(201).json({
         message: "Pledge recorded. Payment has not yet been taken.",
-        donation_id: donationId,
+        donation_id: result.insertId,
         amount,
         payment_status: "pending",
         checkout_url: null
       });
     }
 
-    try {
-      const checkoutUrl = await startCheckout(donationId, amount);
+    if (recent.length) {
+      const checkoutUrl = await resumeCheckout(recent[0].id, amount);
 
-      res.status(201).json({
-        message: "Pledge recorded. Continue to Safepay to complete your payment.",
-        donation_id: donationId,
+      return res.status(200).json({
+        message: "Continue to Safepay to complete your payment.",
+        donation_id: recent[0].id,
         amount,
         payment_status: "pending",
         checkout_url: checkoutUrl
       });
+    }
+
+    // Open the Safepay tracker first, so a Safepay outage leaves no orphaned pledge behind.
+    let tracker;
+
+    try {
+      tracker = await safepay.createTracker(amount);
     } catch (error) {
       console.error("Safepay tracker error:", error.message);
-
-      // The pledge still exists, so the donor can retry from their dashboard.
-      res.status(201).json({
-        message: "Pledge recorded, but online checkout is unavailable right now. You can retry from your dashboard.",
-        donation_id: donationId,
-        amount,
-        payment_status: "pending",
-        checkout_url: null
+      return res.status(502).json({
+        message: "Could not reach Safepay. No donation was recorded; please try again shortly."
       });
     }
+
+    const connection = await db.getConnection();
+    let donationId;
+
+    try {
+      await connection.beginTransaction();
+
+      const [result] = await connection.execute(
+        `INSERT INTO donations
+         (user_id, project_id, amount, payment_method, payment_status, note, payment_channel)
+         VALUES (?, ?, ?, 'safepay', 'pending', ?, ?)`,
+        [req.user.id, projectId, amount, note, channel]
+      );
+
+      donationId = result.insertId;
+
+      await connection.execute(
+        `INSERT INTO payments (donation_id, provider, provider_transaction_id, amount, status)
+         VALUES (?, 'safepay', ?, ?, 'pending')`,
+        [donationId, tracker, amount]
+      );
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+
+    res.status(201).json({
+      message: "Continue to Safepay to complete your payment.",
+      donation_id: donationId,
+      amount,
+      payment_status: "pending",
+      checkout_url: checkoutFor(donationId, tracker)
+    });
   } catch (error) {
     console.error("Create donation error:", error.message);
 
@@ -200,90 +211,97 @@ router.post("/", authenticateToken, async (req, res) => {
   }
 });
 
-async function ownPendingDonation(id, userId) {
+async function ownDonation(id, userId) {
   const [rows] = await db.execute(
-    `SELECT id, amount FROM donations
-     WHERE id = ? AND user_id = ? AND payment_status = 'pending'`,
+    `SELECT id, amount, payment_method, payment_status FROM donations
+     WHERE id = ? AND user_id = ?`,
     [id, userId]
   );
 
   return rows[0];
 }
 
+const STATUS_MESSAGES = {
+  completed: "Payment confirmed. Thank you!",
+  pending: "Safepay has not confirmed this payment yet. If you have just paid, check again in a minute.",
+  cancelled: "This donation was cancelled.",
+  expired: "This donation expired before it was paid.",
+  failed: "This payment failed.",
+  refunded: "This payment was refunded."
+};
+
 // Open (or resume) Safepay checkout for a pending donation of the signed-in donor.
 router.post("/:id/pay", authenticateToken, async (req, res) => {
   try {
     if (!safepay.isConfigured()) {
-      return res.status(503).json({ message: "Online payment is not available." });
+      return res.status(503).json({ message: UNAVAILABLE });
     }
 
-    const donation = await ownPendingDonation(Number(req.params.id), req.user.id);
+    const donation = await ownDonation(Number(req.params.id), req.user.id);
 
-    if (!donation) {
+    if (!donation || donation.payment_method !== "safepay" || donation.payment_status !== "pending") {
       return res.status(404).json({ message: "No pending donation found." });
     }
 
-    res.json({ checkout_url: await startCheckout(donation.id, donation.amount) });
+    // If Safepay already took the money, do not send the donor to pay again.
+    const { status } = await reconcileDonation(donation.id);
+
+    if (status === "completed") {
+      return res.status(409).json({
+        payment_status: "completed",
+        message: "This donation is already paid. Thank you!"
+      });
+    }
+
+    res.json({ checkout_url: await resumeCheckout(donation.id, donation.amount) });
   } catch (error) {
     console.error("Resume checkout error:", error.message);
     res.status(502).json({ message: "Could not reach Safepay. Please try again shortly." });
   }
 });
 
-// Called after the donor returns from Safepay: confirm with Safepay, then complete the donation.
+// Called after the donor returns from Safepay and by "Check status": asks Safepay, never the URL.
 router.post("/:id/verify", authenticateToken, async (req, res) => {
   try {
-    const id = Number(req.params.id);
+    const donation = await ownDonation(Number(req.params.id), req.user.id);
 
-    const [rows] = await db.execute(
-      "SELECT payment_status FROM donations WHERE id = ? AND user_id = ?",
-      [id, req.user.id]
-    );
-
-    if (!rows.length) {
+    if (!donation) {
       return res.status(404).json({ message: "Donation not found." });
     }
 
-    if (rows[0].payment_status === "completed") {
-      return res.json({ payment_status: "completed", message: "Payment confirmed." });
+    if (donation.payment_method !== "safepay" || !safepay.isConfigured()) {
+      return res.json({
+        payment_status: donation.payment_status,
+        message: STATUS_MESSAGES[donation.payment_status]
+      });
     }
 
-    if (!safepay.isConfigured()) {
-      return res.status(503).json({ message: "Online payment is not available." });
-    }
+    const { status } = await reconcileDonation(donation.id);
 
-    const result = await reconcile(id);
-
-    res.json({
-      payment_status: result.paid ? "completed" : "pending",
-      message: result.paid
-        ? "Payment confirmed. Thank you!"
-        : "Safepay has not confirmed this payment yet."
-    });
+    res.json({ payment_status: status, message: STATUS_MESSAGES[status] });
   } catch (error) {
     console.error("Verify payment error:", error.message);
-    res.status(502).json({ message: "Could not verify the payment with Safepay." });
+    res.status(502).json({ message: "Could not verify the payment with Safepay. Please try again shortly." });
   }
 });
 
-// A donor may withdraw their own pledge while it is still pending.
+// A donor may withdraw their own pledge while it is still pending. The record is kept as "cancelled".
 router.delete("/:id", authenticateToken, async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    const donation = await ownPendingDonation(id, req.user.id);
+    const donation = await ownDonation(Number(req.params.id), req.user.id);
 
-    if (!donation) {
+    if (!donation || donation.payment_status !== "pending") {
       return res.status(404).json({
         message: "No pending donation found to cancel."
       });
     }
 
-    // Never discard a payment that Safepay already received.
-    if (safepay.isConfigured()) {
+    // Never cancel a payment that Safepay already received.
+    if (donation.payment_method === "safepay" && safepay.isConfigured()) {
       try {
-        const { paid } = await reconcile(id);
+        const { status } = await reconcileDonation(donation.id);
 
-        if (paid) {
+        if (status === "completed") {
           return res.status(409).json({
             message: "This payment was already completed, so it can't be cancelled."
           });
@@ -297,8 +315,7 @@ router.delete("/:id", authenticateToken, async (req, res) => {
       }
     }
 
-    await db.execute("DELETE FROM payments WHERE donation_id = ?", [id]);
-    await db.execute("DELETE FROM donations WHERE id = ? AND payment_status = 'pending'", [id]);
+    await closeDonation(donation.id, "cancelled");
 
     res.json({ message: "Pending donation cancelled." });
   } catch (error) {

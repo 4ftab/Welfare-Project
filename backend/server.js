@@ -3,6 +3,10 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const db = require("./config/db");
+const migrate = require("./scripts/migrate");
+const mailer = require("./services/mailer");
+const safepay = require("./services/safepay");
+const { startReconciler } = require("./services/payments");
 
 const authRoutes = require("./routes/auth");
 const dashboardRoutes = require("./routes/dashboard");
@@ -13,6 +17,7 @@ const projectsRoutes = require("./routes/projects");
 const announcementsRoutes = require("./routes/announcements");
 const reportsRoutes = require("./routes/reports");
 const publicRoutes = require("./routes/public");
+const paymentsRoutes = require("./routes/payments");
 
 const app = express();
 
@@ -20,10 +25,13 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "https://nojawan-itehad-welfare-chi.vercel.app",
-  process.env.FRONTEND_URL
+  String(process.env.FRONTEND_URL || "").trim().replace(/\/+$/, "")
 ].filter(Boolean);
 
 app.disable("x-powered-by");
+
+// Render sits behind one proxy; without this every visitor shares the proxy's IP for rate limiting.
+app.set("trust proxy", 1);
 
 // CORS configuration
 app.use(
@@ -53,7 +61,13 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: "1mb" }));
+// Keep the exact bytes of webhook bodies for signature verification.
+app.use(express.json({
+  limit: "1mb",
+  verify: (req, res, buf) => {
+    if (req.originalUrl.startsWith("/api/payments/")) req.rawBody = buf.toString("utf8");
+  }
+}));
 
 app.get("/", (req, res) => {
   res.json({
@@ -88,6 +102,7 @@ app.use("/api/projects", projectsRoutes);
 app.use("/api/announcements", announcementsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/public", publicRoutes);
+app.use("/api/payments", paymentsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
@@ -108,12 +123,26 @@ const PORT = process.env.PORT || 5000;
 async function startServer() {
   try {
     await db.query("SELECT 1");
+    await migrate();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log("MySQL connected successfully.");
       console.log("Allowed frontend origins:", allowedOrigins);
     });
+
+    const paymentMode = safepay.mode();
+    if (paymentMode === "ready") {
+      console.log(`Safepay: ${safepay.environment()} mode; webhook secret ${safepay.webhookConfigured() ? "set" : "NOT set"}.`);
+      startReconciler();
+    } else if (paymentMode === "invalid") {
+      safepay.configProblems().forEach((p) => console.error(`Safepay config: ${p}`));
+    } else {
+      console.log("Safepay: no keys configured; donations are recorded as pledges.");
+    }
+
+    // Reports a wrong or missing Brevo key in the logs right away, without sending email.
+    mailer.checkConfig().catch(() => {});
   } catch (error) {
     console.error("Could not connect to MySQL:", error.message);
     process.exit(1);

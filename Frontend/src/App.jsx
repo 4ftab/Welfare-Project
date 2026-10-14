@@ -54,6 +54,7 @@ export default function App() {
   const [recent, setRecent] = useState([]);
   const [burst, setBurst] = useState(0);
   const [paying, setPaying] = useState(false);
+  const donating = useRef(false);
 
   useAmbient();
 
@@ -232,7 +233,11 @@ export default function App() {
 
     (async () => {
       try {
-        const result = await api(`/donations/${donationId}/verify`, { method: "POST", token });
+        let result = await api(`/donations/${donationId}/verify`, { method: "POST", token });
+        for (let attempt = 0; attempt < 3 && result.payment_status === "pending"; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+          result = await api(`/donations/${donationId}/verify`, { method: "POST", token });
+        }
         if (result.payment_status === "completed") {
           notify("Payment confirmed. Thank you for your generosity!");
           setBurst((n) => n + 1);
@@ -331,10 +336,14 @@ export default function App() {
     const form = new FormData(event.currentTarget);
     const amount = Number(selectedAmount || form.get("amount"));
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      fail(tr("Please choose or enter an amount.", "براہ کرم رقم منتخب یا درج کریں۔"));
+    if (!Number.isInteger(amount) || amount < 10) {
+      fail(tr("Please choose or enter a whole amount of at least PKR 10.", "براہ کرم کم از کم 10 روپے کی پوری رقم منتخب یا درج کریں۔"));
       return;
     }
+
+    // Ignore a second click while the first request is still running.
+    if (donating.current) return;
+    donating.current = true;
 
     try {
       const result = await api("/donations", {
@@ -367,6 +376,8 @@ export default function App() {
       await loadDashboard(token);
     } catch (e) {
       fail(e.message);
+    } finally {
+      donating.current = false;
     }
   }
 
@@ -377,7 +388,12 @@ export default function App() {
       window.location.assign(result.checkout_url);
     } catch (e) {
       setPaying(false);
-      fail(e.message);
+      if (e.status === 409) {
+        notify(e.message);
+        await loadDashboard(token);
+      } else {
+        fail(e.message);
+      }
     }
   }
 
@@ -873,7 +889,7 @@ export default function App() {
                       <button className="button button-light" onClick={() => loadDashboard(token)}>↻ {tr("Refresh", "تازہ کریں")}</button>
                     </div>
                     <div className="chips">
-                      {["all", "pending", "completed", "failed", "refunded"].map((s) => (
+                      {["all", "pending", "completed", "failed", "cancelled", "expired", "refunded"].map((s) => (
                         <button key={s} className={`chip ${donationFilter === s ? "active" : ""}`} onClick={() => setDonationFilter(s)}>{s}</button>
                       ))}
                     </div>
@@ -959,7 +975,7 @@ export default function App() {
                         </div>
                         <label className="custom-amount">
                           {tr("Or enter another amount", "یا کوئی اور رقم درج کریں")}
-                          <input name="amount" type="number" min="1" max="1000000000" step="0.01" value={selectedAmount} onChange={(e) => setSelectedAmount(e.target.value)} placeholder={tr("Enter amount", "رقم درج کریں")} required />
+                          <input name="amount" type="number" min="10" max="1000000" step="1" value={selectedAmount} onChange={(e) => setSelectedAmount(e.target.value)} placeholder={tr("Enter amount", "رقم درج کریں")} required />
                         </label>
                       </fieldset>
 

@@ -53,7 +53,7 @@ router.get("/config", (req, res) => {
     online_payments: safepay.isConfigured(),
     channels: safepay.enabledChannels(),
     payment_provider: "safepay",
-    sandbox: process.env.SAFEPAY_ENV !== "production"
+    sandbox: safepay.environment() !== "production"
   });
 });
 

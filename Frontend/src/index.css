@@ -906,7 +906,8 @@ tbody tr:last-child td {
 }
 
 .status.failed,
-.status.cancelled {
+.status.cancelled,
+.status.expired {
   border-color: #f4d1d1;
   color: #b34040;
   background: #fff0f0;

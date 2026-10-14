@@ -19,13 +19,20 @@ async function authenticateToken(req, res, next) {
     // Read the user's current role from the database.
     // This prevents a stale token from retaining old admin permissions.
     const [users] = await db.execute(
-      "SELECT id, role, is_active FROM users WHERE id = ?",
+      "SELECT id, role, is_active, email_verified FROM users WHERE id = ?",
       [decoded.id]
     );
 
     if (!users.length || !users[0].is_active) {
       return res.status(401).json({
         message: "Account not found or inactive."
+      });
+    }
+
+    if (!users[0].email_verified) {
+      return res.status(403).json({
+        code: "EMAIL_NOT_VERIFIED",
+        message: "Please verify your email address first."
       });
     }
 

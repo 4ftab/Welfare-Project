@@ -343,7 +343,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
             <div className="toolbar">
               <input type="search" placeholder={tr("Search donor, email, reference…", "نام، ای میل، حوالہ تلاش کریں…")} value={donationSearch} onChange={(e) => setDonationSearch(e.target.value)} />
               <div className="chips">
-                {["all", "pending", "completed", "failed", "refunded"].map((s) => (
+                {["all", "pending", "completed", "failed", "cancelled", "expired", "refunded"].map((s) => (
                   <button key={s} className={`chip ${donationFilter === s ? "active" : ""}`} onClick={() => setDonationFilter(s)}>{s}</button>
                 ))}
               </div>
@@ -368,12 +368,12 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
                           onChange={(e) => {
                             const status = e.target.value;
                             if (!status) return;
-                            const ref = status === "completed" ? window.prompt(tr("Receipt / transaction reference (optional):", "رسید / حوالہ (اختیاری):")) : null;
+                            const ref = status === "completed" && d.payment_method !== "safepay" ? window.prompt(tr("Receipt / transaction reference (optional):", "رسید / حوالہ (اختیاری):")) : null;
                             act(() => post(`/admin/donations/${d.donation_id}/status`, { status, transaction_reference: ref || undefined }, "PATCH"), tr("Donation updated.", "عطیہ اپ ڈیٹ ہوگیا۔"));
                           }}
                         >
                           <option value="">{tr("Set status…", "حیثیت…")}</option>
-                          {["pending", "completed", "failed", "refunded"].filter((s) => s !== d.payment_status).map((s) => (
+                          {["pending", "completed", "failed", "cancelled", "refunded"].filter((s) => s !== d.payment_status).map((s) => (
                             <option key={s} value={s}>{s}</option>
                           ))}
                         </select>

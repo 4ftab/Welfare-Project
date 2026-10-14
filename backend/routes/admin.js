@@ -5,6 +5,8 @@ const {
   authenticateToken,
   requireAdmin
 } = require("../middleware/auth");
+const safepay = require("../services/safepay");
+const { reconcileDonation } = require("../services/payments");
 
 const router = express.Router();
 
@@ -161,8 +163,41 @@ router.patch("/donations/:id/status", async (req, res) => {
     const id = Number(req.params.id);
     const { status, transaction_reference } = req.body;
 
-    if (!["pending", "completed", "failed", "refunded"].includes(status)) {
+    if (!["pending", "completed", "failed", "refunded", "cancelled", "expired"].includes(status)) {
       return res.status(400).json({ message: "Invalid donation status." });
+    }
+
+    const [[donation]] = await db.execute(
+      "SELECT payment_method, payment_status FROM donations WHERE id = ?",
+      [id]
+    );
+
+    if (!donation) {
+      return res.status(404).json({ message: "Donation not found." });
+    }
+
+    // An online payment counts only when Safepay itself confirms it.
+    if (donation.payment_method === "safepay" && status === "completed") {
+      if (!safepay.isConfigured()) {
+        return res.status(503).json({ message: "Safepay is not configured, so the payment cannot be checked." });
+      }
+
+      const result = await reconcileDonation(id);
+
+      if (result.status !== "completed") {
+        return res.status(409).json({
+          message: `Safepay has not confirmed this payment (Safepay state: ${result.state || "unknown"}). It stays ${result.status}.`
+        });
+      }
+
+      await audit(req.user.id, "DONATION_STATUS_CHANGED", `Donation ID ${id}; confirmed with Safepay`);
+      return res.json({ message: "Safepay confirmed the payment. Donation marked completed." });
+    }
+
+    if (donation.payment_method === "safepay" && donation.payment_status === "completed" && status !== "refunded") {
+      return res.status(409).json({
+        message: "A Safepay payment confirmed by Safepay can only be changed to refunded."
+      });
     }
 
     const [result] = await db.execute(

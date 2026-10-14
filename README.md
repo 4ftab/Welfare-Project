@@ -9,8 +9,8 @@ financial reports, donor accounts and statements, and an administrator console. 
 # backend  (Node + Express + MySQL)
 cd backend
 npm install
-# .env needs: PORT, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET, FRONTEND_URL
-npm run migrate      # idempotent; adds contact_messages, donations.project_id, donations.note, users OTP columns
+cp .env.example .env   # then fill in the values
+npm run migrate      # optional: the server also runs this idempotent migration at startup
 npm run make-admin   # promote a registered user to administrator
 npm run dev
 
@@ -49,41 +49,52 @@ npm run dev          # http://localhost:5173
 
 ## Email verification (OTP)
 
-A new account stays locked until the donor enters the 6-digit code emailed at registration. The code
-expires after 10 minutes, allows 5 wrong attempts, and can be re-sent once a minute. Signing in to an
-unverified account sends a fresh code and returns to the code step. Accounts that existed before this
-feature are marked verified by `npm run migrate`.
+A new account stays locked until the donor enters the 6-digit code emailed at registration. The code is
+stored only as a hash, expires after 10 minutes, allows 5 wrong attempts, and can be re-sent once a
+minute. Signing in to an unverified account sends a fresh code and returns to the code step, and the API
+refuses tokens of unverified accounts. Accounts that existed before this feature are marked verified by
+the migration.
 
-Add SMTP settings to `backend/.env` so the codes are actually emailed:
+Email is sent through **Brevo's HTTPS API** (Render blocks outbound SMTP, so Gmail SMTP times out there):
 
 ```
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587                  # 465 for implicit TLS
-SMTP_USER=you@gmail.com
-SMTP_PASS=...                  # for Gmail: an App Password, not the account password
-MAIL_FROM="Nojawan Itehad Welfare <you@gmail.com>"
+BREVO_API_KEY=xkeysib-...                        # an API key, NOT an SMTP key (xsmtpsib-...)
+MAIL_FROM=nojawan.itehad.welfare@gmail.com       # must be a verified sender in Brevo
 ```
 
-Without these, development prints the code to the backend console instead of emailing it; with
-`NODE_ENV=production` registration fails until SMTP is configured.
+At startup the server checks the key with Brevo (no email is sent) and logs either
+`Email: Brevo API key accepted ...` or the exact problem. `npm run test-email -- you@example.com`
+sends one test message. For local development without Brevo, `MAIL_DEV_LOG_OTP=true` prints codes to
+the console instead (ignored when `NODE_ENV=production`).
 
 ## Online payments (Safepay)
 
-Add to `backend/.env` (sandbox keys from the Safepay dashboard; never commit this file):
+Settings (see `backend/.env.example`; never commit `.env`):
 
 ```
-SAFEPAY_ENV=sandbox            # or production
-SAFEPAY_PUBLIC_KEY=sec_...
-SAFEPAY_SECRET_KEY=...
-FRONTEND_URL=http://localhost:5173
+SAFEPAY_ENV=sandbox            # or production; any other value disables payments with an error
+SAFEPAY_PUBLIC_KEY=sec_...     # public API key for that environment
+SAFEPAY_SECRET_KEY=...         # secret key for that environment
+SAFEPAY_WEBHOOK_SECRET=...     # webhook shared secret from the Safepay dashboard
+FRONTEND_URL=https://...       # where Safepay sends donors back; must be https in production
 ```
 
-Flow: the donor creates a pledge → the server opens a Safepay tracker and returns a hosted-checkout URL →
-the donor pays on Safepay and is redirected back → the server **asks Safepay** for the tracker state
-(`GET /order/v1/{tracker}`) and only marks the donation `completed` when the state is `TRACKER_ENDED`
-and the amount and currency match. The redirect URL alone is never trusted. A pending pledge can be
-resumed ("Pay now") or re-checked ("Check status") from the dashboard. Without keys, the site falls back
-to plain pledges that an administrator confirms.
+Flow:
+
+1. The donor chooses a whole PKR amount; the server validates it.
+2. The server opens a Safepay tracker, then records the pending donation and payment together.
+   Submitting the same pledge again within 10 minutes continues the first one instead of creating another.
+3. The donor pays on Safepay's hosted checkout (card details never touch this site).
+4. The payment is confirmed only by asking Safepay with the merchant secret (`GET /order/v1/{tracker}`):
+   the tracker must be `TRACKER_ENDED` with a transaction, for this merchant, for exactly the amount in PKR.
+   This check runs when the donor returns, on "Check status", when a signed webhook arrives
+   (`POST /api/payments/safepay/webhook`), and every 5 minutes in the background. The redirect URL and the
+   webhook body are never trusted on their own.
+5. Pledges unpaid after 24 hours become `expired`; cancelled pledges are kept as `cancelled`. If Safepay
+   later reports one of them paid, it is still recorded as `completed`.
+
+Only `completed` donations count in totals and reports. An administrator cannot mark a Safepay donation
+completed unless Safepay confirms it; offline gifts (cash, bank transfer) are recorded separately.
 
 ### Easypaisa and JazzCash
 
@@ -94,13 +105,5 @@ Safepay enables them on the merchant account. After Safepay confirms they are en
 SAFEPAY_CHANNELS=card,easypaisa,jazzcash
 ```
 
-to `backend/.env`. Donors then get a "Pay with" picker, and the chosen method is stored on the donation
-(`donations.payment_channel`) and shown in the dashboard, admin console and CSV export. Leave it unset
-(card only) until then, otherwise donors would pick a wallet and find only a card form.
-
-Not yet implemented: a Safepay webhook (the shared secret is not configured), so payments are confirmed
-when the donor returns or presses "Check status".
-
-## Notes
-
-- Pledges stay `pending` until Safepay confirms them or an administrator marks them completed.
+Donors then get a "Pay with" picker. When Safepay reports which processor took the payment, the stored
+method is updated to match. Leave it unset (card only) until then.
