@@ -1,66 +1,99 @@
-// Thin SMTP mailer. Without SMTP settings, development prints the message to the server console instead.
-const nodemailer = require("nodemailer");
 
-const production = process.env.NODE_ENV === "production";
+const https = require("https");
 
-let transporter = null;
-
-function isConfigured() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-}
-
-function getTransporter() {
-  if (!transporter) {
-    const port = Number(process.env.SMTP_PORT) || 587;
-
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port,
-      secure: port === 465,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      connectionTimeout: 15000
-    });
-  }
-
-  return transporter;
-}
+const SENDER_EMAIL =
+  process.env.MAIL_FROM || "nojawan.itehad.welfare@gmail.com";
 
 async function sendMail({ to, subject, text, html }) {
-  if (!isConfigured()) {
-    if (production) {
-      throw new Error("SMTP is not configured.");
-    }
+  const apiKey = process.env.BREVO_API_KEY;
 
-    console.log(`[mail] SMTP not configured, printing instead.\n  To: ${to}\n  Subject: ${subject}\n  ${text}`);
-    return;
+  if (!apiKey) {
+    throw new Error("BREVO_API_KEY is not configured.");
   }
 
-  await getTransporter().sendMail({
-    from: process.env.MAIL_FROM || process.env.SMTP_USER,
-    to,
+  const payload = JSON.stringify({
+    sender: {
+      name: "Nojawan Itehad Welfare",
+      email: SENDER_EMAIL
+    },
+    to: [{ email: to }],
     subject,
-    text,
-    html
+    textContent: text,
+    htmlContent: html
+  });
+
+  await new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: "api.brevo.com",
+        path: "/v3/smtp/email",
+        method: "POST",
+        headers: {
+          "api-key": apiKey,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload)
+        },
+        timeout: 15000
+      },
+      (res) => {
+        let responseBody = "";
+
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          responseBody += chunk;
+        });
+
+        res.on("end", () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve();
+          } else {
+            reject(
+              new Error(
+                `Brevo API error (${res.statusCode}): ${responseBody}`
+              )
+            );
+          }
+        });
+      }
+    );
+
+    req.on("timeout", () => {
+      req.destroy(new Error("Brevo API connection timed out."));
+    });
+
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
   });
 }
 
-// Emails the one-time code that confirms a new account's email address.
-function sendOtpEmail(to, name, code, minutes) {
+async function sendOtpEmail(to, name, code, minutes) {
   const safeName = String(name).replace(/[<>&"]/g, "");
 
   return sendMail({
     to,
     subject: `${code} is your Nojawan Itehad Welfare verification code`,
-    text: `Assalam o Alaikum ${name},\n\nYour verification code is ${code}. It expires in ${minutes} minutes.\n\nIf you did not create an account, you can ignore this email.`,
-    html: `<div style="font-family:Arial,sans-serif;max-width:460px;margin:auto;color:#173b3e">
-  <h2 style="margin:0 0 12px">Nojawan Itehad Welfare</h2>
-  <p>Assalam o Alaikum ${safeName},</p>
-  <p>Use this code to verify your email address and finish creating your account:</p>
-  <p style="font-size:30px;font-weight:700;letter-spacing:8px;margin:18px 0">${code}</p>
-  <p>The code expires in ${minutes} minutes.</p>
-  <p style="color:#70848a;font-size:12px">If you did not create an account, you can ignore this email.</p>
-</div>`
+    text:
+      `Assalam o Alaikum ${name},\n\n` +
+      `Your verification code is ${code}. ` +
+      `It expires in ${minutes} minutes.\n\n` +
+      "If you did not create an account, you can ignore this email.",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:460px;margin:auto;color:#173b3e">
+        <h2>Nojawan Itehad Welfare</h2>
+        <p>Assalam o Alaikum ${safeName},</p>
+        <p>Use this code to verify your email address:</p>
+        <p style="font-size:30px;font-weight:700;letter-spacing:8px">${code}</p>
+        <p>The code expires in ${minutes} minutes.</p>
+        <p style="color:#70848a;font-size:12px">
+          If you did not create an account, you can ignore this email.
+        </p>
+      </div>`
   });
+}
+
+function isConfigured() {
+  return Boolean(process.env.BREVO_API_KEY);
 }
 
 module.exports = { isConfigured, sendOtpEmail };
