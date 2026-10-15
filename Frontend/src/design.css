@@ -66,13 +66,14 @@ body {
 
 [data-rv] {
   transition:
-    opacity 0.75s var(--ease-out) calc(var(--rv-i, 0) * 70ms),
-    transform 0.85s var(--ease-out) calc(var(--rv-i, 0) * 70ms);
+    opacity 0.3s ease-out,
+    transform 0.35s ease-out;
 }
 
 [data-rv="out"] {
   opacity: 0;
-  transform: translateY(26px) scale(0.985);
+  transform: translateY(14px);
+  will-change: opacity, transform;
 }
 
 [data-rv="in"] {
@@ -1312,5 +1313,23 @@ details[open] > summary ~ * {
     display: block;
     padding: 0;
     border-style: dashed;
+  }
+}
+
+/* ── Scroll performance on touch devices ──
+   Live blur re-renders every frame while the page moves, which is the main cause of janky scrolling on
+   phones. Always-visible surfaces keep their translucent colour but drop the blur there. The top bar,
+   dialogs and toasts keep theirs. */
+@media (hover: none) and (pointer: coarse) {
+  .impact-strip article,
+  .pill,
+  .ticker,
+  .tabs,
+  .sidebar,
+  .art-glyph,
+  .scene-tag,
+  .hero-note {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }

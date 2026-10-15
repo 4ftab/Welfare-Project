@@ -8,28 +8,26 @@ const router = express.Router();
 // Public transparency numbers for the landing page.
 router.get("/stats", async (req, res) => {
   try {
-    const [[raised]] = await db.execute(
-      `SELECT COALESCE(SUM(amount), 0) AS total,
-              COUNT(*) AS count,
-              COUNT(DISTINCT user_id) AS donors
-       FROM donations WHERE payment_status = 'completed'`
-    );
-
-    const [[spent]] = await db.execute(
-      "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses"
-    );
-
-    const [[projects]] = await db.execute(
-      `SELECT COUNT(*) AS total,
-              SUM(status = 'ongoing') AS ongoing,
-              SUM(status = 'completed') AS completed
-       FROM projects`
-    );
-
-    const [categories] = await db.execute(
-      `SELECT category, SUM(amount) AS total
-       FROM expenses GROUP BY category ORDER BY total DESC LIMIT 6`
-    );
+    // Independent queries run together rather than one after another.
+    const [[[raised]], [[spent]], [[projects]], [categories]] = await Promise.all([
+      db.execute(
+        `SELECT COALESCE(SUM(amount), 0) AS total,
+                COUNT(*) AS count,
+                COUNT(DISTINCT user_id) AS donors
+         FROM donations WHERE payment_status = 'completed'`
+      ),
+      db.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses"),
+      db.execute(
+        `SELECT COUNT(*) AS total,
+                SUM(status = 'ongoing') AS ongoing,
+                SUM(status = 'completed') AS completed
+         FROM projects`
+      ),
+      db.execute(
+        `SELECT category, SUM(amount) AS total
+         FROM expenses GROUP BY category ORDER BY total DESC LIMIT 6`
+      )
+    ]);
 
     res.json({
       total_raised: raised.total,

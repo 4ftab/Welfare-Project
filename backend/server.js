@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const db = require("./config/db");
 const migrate = require("./scripts/migrate");
 const mailer = require("./services/mailer");
@@ -30,6 +31,9 @@ const allowedOrigins = [
 
 app.disable("x-powered-by");
 
+// Smaller JSON responses matter on slow mobile connections.
+app.use(compression());
+
 // Render sits behind one proxy; without this every visitor shares the proxy's IP for rate limiting.
 app.set("trust proxy", 1);
 
@@ -51,6 +55,20 @@ app.use(
     optionsSuccessStatus: 204
   })
 );
+
+// Logs how long each API request took (method, path without query string, status, ms). Nothing from the
+// request body, headers or query is logged, so tokens, passwords and codes can never end up here.
+app.use((req, res, next) => {
+  const started = process.hrtime.bigint();
+
+  res.on("finish", () => {
+    const ms = Math.round(Number(process.hrtime.bigint() - started) / 1e6);
+    const path = req.originalUrl.split("?")[0].replace(/\/\d+/g, "/:id");
+    if (req.method !== "OPTIONS" && path !== "/") console.log(`[req] ${req.method} ${path} ${res.statusCode} ${ms}ms`);
+  });
+
+  next();
+});
 
 app.use((req, res, next) => {
   res.set({
@@ -122,14 +140,26 @@ const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   try {
-    await db.query("SELECT 1");
-    await migrate();
+    const bootStarted = Date.now();
 
+    // The first query pays for the TLS handshake with the database.
+    await db.query("SELECT 1");
+    console.log(`[boot] first database connection took ${Date.now() - bootStarted}ms`);
+
+    // Start answering requests now; the idempotent schema check and extra connections finish in parallel.
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log("MySQL connected successfully.");
       console.log("Allowed frontend origins:", allowedOrigins);
     });
+
+    db.warmUp()
+      .then(() => console.log(`[boot] connection pool warmed in ${Date.now() - bootStarted}ms`))
+      .catch((error) => console.warn("Pool warm-up failed:", error.message));
+    db.keepWarm();
+
+    await migrate();
+    console.log(`[boot] schema check done at ${Date.now() - bootStarted}ms`);
 
     const paymentMode = safepay.mode();
     if (paymentMode === "ready") {

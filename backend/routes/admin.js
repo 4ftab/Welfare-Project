@@ -3,7 +3,8 @@ const express = require("express");
 const db = require("../config/db");
 const {
   authenticateToken,
-  requireAdmin
+  requireAdmin,
+  invalidateAuthCache
 } = require("../middleware/auth");
 const safepay = require("../services/safepay");
 const { reconcileDonation } = require("../services/payments");
@@ -93,6 +94,8 @@ router.patch("/users/:id", async (req, res) => {
     if (!result.affectedRows) {
       return res.status(404).json({ message: "User not found." });
     }
+
+    invalidateAuthCache(id);
 
     await audit(
       req.user.id,
@@ -320,51 +323,52 @@ router.get("/export/expenses.csv", async (req, res) => {
 // Dashboard numbers + 6-month trend + top donors.
 router.get("/overview", async (req, res) => {
   try {
-    const [[totals]] = await db.execute(
-      `SELECT
-         COALESCE(SUM(CASE WHEN payment_status = 'completed' THEN amount END), 0) AS raised,
-         SUM(payment_status = 'pending') AS pending_count,
-         COALESCE(SUM(CASE WHEN payment_status = 'pending' THEN amount END), 0) AS pending_amount
-       FROM donations`
-    );
-
-    const [[spent]] = await db.execute(
-      "SELECT COALESCE(SUM(amount), 0) AS total FROM expenses"
-    );
-
-    const [[users]] = await db.execute(
-      `SELECT COUNT(*) AS total, SUM(is_active = 1) AS active
-       FROM users WHERE role = 'donor'`
-    );
-
-    const [[unread]] = await db.execute(
-      "SELECT COUNT(*) AS n FROM contact_messages WHERE is_read = 0"
-    );
-
-    const [donationSeries] = await db.execute(
-      `SELECT DATE_FORMAT(COALESCE(donated_at, created_at), '%Y-%m') AS month,
-              SUM(amount) AS total
-       FROM donations
-       WHERE payment_status = 'completed'
-         AND COALESCE(donated_at, created_at) >=
-             DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 5 MONTH)
-       GROUP BY month`
-    );
-
-    const [expenseSeries] = await db.execute(
-      `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS month, SUM(amount) AS total
-       FROM expenses
-       WHERE expense_date >=
-             DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 5 MONTH)
-       GROUP BY month`
-    );
-
-    const [topDonors] = await db.execute(
-      `SELECT u.id, u.full_name, SUM(d.amount) AS total
-       FROM donations d JOIN users u ON u.id = d.user_id
-       WHERE d.payment_status = 'completed'
-       GROUP BY u.id ORDER BY total DESC LIMIT 5`
-    );
+    // The seven queries do not depend on each other, so they run together instead of one by one.
+    const [
+      [[totals]],
+      [[spent]],
+      [[users]],
+      [[unread]],
+      [donationSeries],
+      [expenseSeries],
+      [topDonors]
+    ] = await Promise.all([
+      db.execute(
+        `SELECT
+           COALESCE(SUM(CASE WHEN payment_status = 'completed' THEN amount END), 0) AS raised,
+           SUM(payment_status = 'pending') AS pending_count,
+           COALESCE(SUM(CASE WHEN payment_status = 'pending' THEN amount END), 0) AS pending_amount
+         FROM donations`
+      ),
+      db.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses"),
+      db.execute(
+        `SELECT COUNT(*) AS total, SUM(is_active = 1) AS active
+         FROM users WHERE role = 'donor'`
+      ),
+      db.execute("SELECT COUNT(*) AS n FROM contact_messages WHERE is_read = 0"),
+      db.execute(
+        `SELECT DATE_FORMAT(COALESCE(donated_at, created_at), '%Y-%m') AS month,
+                SUM(amount) AS total
+         FROM donations
+         WHERE payment_status = 'completed'
+           AND COALESCE(donated_at, created_at) >=
+               DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 5 MONTH)
+         GROUP BY month`
+      ),
+      db.execute(
+        `SELECT DATE_FORMAT(expense_date, '%Y-%m') AS month, SUM(amount) AS total
+         FROM expenses
+         WHERE expense_date >=
+               DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 5 MONTH)
+         GROUP BY month`
+      ),
+      db.execute(
+        `SELECT u.id, u.full_name, SUM(d.amount) AS total
+         FROM donations d JOIN users u ON u.id = d.user_id
+         WHERE d.payment_status = 'completed'
+         GROUP BY u.id ORDER BY total DESC LIMIT 5`
+      )
+    ]);
 
     const months = [];
     const now = new Date();

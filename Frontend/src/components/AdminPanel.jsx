@@ -13,7 +13,8 @@ function toDateInput(value) {
 
 export default function AdminPanel({ token, tr, projects, reloadPublic, notify, fail, currentUserId }) {
   const [tab, setTab] = useState("overview");
-  const [loading, setLoading] = useState(true);
+  // Which datasets have arrived. The console appears at once and each tab fills in when its data lands.
+  const [loaded, setLoaded] = useState({});
 
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
@@ -31,29 +32,29 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
   const [userSearch, setUserSearch] = useState("");
   const [expenseSearch, setExpenseSearch] = useState("");
 
+  // All requests start together; each one updates its own part of the screen as soon as it answers,
+  // so a slow request (or one that fails) never holds back the others.
   const refresh = useCallback(async () => {
-    try {
-      const [ov, us, dn, ex, an, ms, lg] = await Promise.all([
-        api("/admin/overview", { token }),
-        api("/admin/donors", { token }),
-        api("/admin/donations", { token }),
-        api("/expenses", { token }),
-        api("/announcements/all", { token }),
-        api("/admin/messages", { token }),
-        api("/admin/audit-logs", { token }),
-      ]);
-      setOverview(ov);
-      setUsers(us.users || []);
-      setDonations(dn.donations || []);
-      setExpenses(ex.expenses || []);
-      setAnnouncements(an.announcements || []);
-      setMessages(ms.messages || []);
-      setLogs(lg.logs || []);
-    } catch (e) {
-      fail(e.message);
-    } finally {
-      setLoading(false);
-    }
+    const failures = new Set();
+    const load = (key, path, apply) =>
+      api(path, { token })
+        .then((data) => {
+          apply(data);
+          setLoaded((current) => ({ ...current, [key]: true }));
+        })
+        .catch((e) => failures.add(e.message));
+
+    await Promise.all([
+      load("overview", "/admin/overview", setOverview),
+      load("users", "/admin/donors", (d) => setUsers(d.users || [])),
+      load("donations", "/admin/donations", (d) => setDonations(d.donations || [])),
+      load("expenses", "/expenses", (d) => setExpenses(d.expenses || [])),
+      load("announcements", "/announcements/all", (d) => setAnnouncements(d.announcements || [])),
+      load("messages", "/admin/messages", (d) => setMessages(d.messages || [])),
+      load("activity", "/admin/audit-logs", (d) => setLogs(d.logs || [])),
+    ]);
+
+    if (failures.size) fail([...failures][0]);
   }, [token, fail]);
 
   useEffect(() => {
@@ -194,15 +195,16 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
     </>
   );
 
-  if (loading) {
-    return (
-      <section className="panel">
-        <div className="skeleton-line wide" />
-        <div className="skeleton-line" />
-        <div className="skeleton-line" />
-      </section>
-    );
-  }
+  const tabReady = {
+    overview: loaded.overview,
+    donations: loaded.donations && loaded.users,
+    expenses: loaded.expenses,
+    projects: true,
+    announcements: loaded.announcements,
+    users: loaded.users,
+    messages: loaded.messages,
+    activity: loaded.activity,
+  };
 
   return (
     <>
@@ -234,7 +236,15 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
       </div>
 
       {/* ───────── OVERVIEW ───────── */}
-      {tab === "overview" && overview && (
+      {!tabReady[tab] && (
+        <section className="panel" aria-busy="true" aria-label={tr("Loading", "لوڈ ہو رہا ہے")}>
+          <div className="skeleton-line wide" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+        </section>
+      )}
+
+      {tab === "overview" && tabReady.overview && overview && (
         <>
           <div className="stats-grid four">
             <article className="stat-card"><span>{tr("Funds raised", "جمع شدہ فنڈز")}</span><strong>{money(overview.raised)}</strong><small>{tr("Completed donations", "مکمل عطیات")}</small></article>
@@ -305,7 +315,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
       )}
 
       {/* ───────── DONATIONS ───────── */}
-      {tab === "donations" && (
+      {tab === "donations" && tabReady.donations && (
         <>
           <section className="panel">
             <h3>{tr("Record a verified offline donation", "تصدیق شدہ آف لائن عطیہ درج کریں")}</h3>
@@ -390,7 +400,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
       )}
 
       {/* ───────── EXPENSES ───────── */}
-      {tab === "expenses" && (
+      {tab === "expenses" && tabReady.expenses && (
         <>
           <section className="panel">
             <h3>{tr("Record an expense", "اخراجات درج کریں")}</h3>
@@ -499,7 +509,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
       )}
 
       {/* ───────── ANNOUNCEMENTS ───────── */}
-      {tab === "announcements" && (
+      {tab === "announcements" && tabReady.announcements && (
         <>
           <section className="panel">
             <div className="section-heading">
@@ -538,7 +548,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
       )}
 
       {/* ───────── USERS ───────── */}
-      {tab === "users" && (
+      {tab === "users" && tabReady.users && (
         <section className="panel">
           <h3>{tr("Registered members", "رجسٹرڈ اراکین")}</h3>
           <p className="muted">{tr("Deactivate accounts that should no longer sign in, or promote trusted members to administrator.", "جن اکاؤنٹس کو لاگ اِن نہیں کرنا چاہیے انہیں غیر فعال کریں یا قابلِ اعتماد رکن کو ایڈمن بنائیں۔")}</p>
@@ -580,7 +590,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
       )}
 
       {/* ───────── MESSAGES ───────── */}
-      {tab === "messages" && (
+      {tab === "messages" && tabReady.messages && (
         <section className="panel">
           <h3>{tr("Contact inbox", "رابطہ پیغامات")}</h3>
           <p className="muted">{tr("Messages sent through the website contact form.", "ویب سائٹ کے رابطہ فارم سے بھیجے گئے پیغامات۔")}</p>
@@ -603,7 +613,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
       )}
 
       {/* ───────── ACTIVITY ───────── */}
-      {tab === "activity" && (
+      {tab === "activity" && tabReady.activity && (
         <section className="panel">
           <h3>{tr("Activity log", "سرگرمی لاگ")}</h3>
           <p className="muted">{tr("The latest 200 administrative actions.", "تازہ ترین 200 انتظامی کارروائیاں۔")}</p>

@@ -2,6 +2,39 @@
 const jwt = require("jsonwebtoken");
 const db = require("../config/db");
 
+// The database is the source of truth for role and active status, but asking it on every single request
+// costs a network round trip each time. Results are remembered for a few seconds, and are dropped at
+// once whenever an administrator changes a user, so a deactivated or demoted account loses access at
+// most AUTH_CACHE_MS later even in the worst case.
+const AUTH_CACHE_MS = 15 * 1000;
+const authCache = new Map();
+
+function invalidateAuthCache(userId) {
+  if (userId === undefined) authCache.clear();
+  else authCache.delete(Number(userId));
+}
+
+async function currentAccount(id) {
+  const cached = authCache.get(id);
+
+  if (cached && cached.expires > Date.now()) return cached.account;
+
+  const [users] = await db.execute(
+    "SELECT id, role, is_active, email_verified FROM users WHERE id = ?",
+    [id]
+  );
+
+  const account = users[0] || null;
+  authCache.set(id, { account, expires: Date.now() + AUTH_CACHE_MS });
+
+  if (authCache.size > 500) {
+    const now = Date.now();
+    for (const [key, entry] of authCache) if (entry.expires <= now) authCache.delete(key);
+  }
+
+  return account;
+}
+
 async function authenticateToken(req, res, next) {
   const authHeader = req.headers.authorization;
 
@@ -16,20 +49,17 @@ async function authenticateToken(req, res, next) {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Read the user's current role from the database.
+    // Read the user's current role from the database (briefly cached, see above).
     // This prevents a stale token from retaining old admin permissions.
-    const [users] = await db.execute(
-      "SELECT id, role, is_active, email_verified FROM users WHERE id = ?",
-      [decoded.id]
-    );
+    const account = await currentAccount(decoded.id);
 
-    if (!users.length || !users[0].is_active) {
+    if (!account || !account.is_active) {
       return res.status(401).json({
         message: "Account not found or inactive."
       });
     }
 
-    if (!users[0].email_verified) {
+    if (!account.email_verified) {
       return res.status(403).json({
         code: "EMAIL_NOT_VERIFIED",
         message: "Please verify your email address first."
@@ -37,8 +67,8 @@ async function authenticateToken(req, res, next) {
     }
 
     req.user = {
-      id: users[0].id,
-      role: users[0].role
+      id: account.id,
+      role: account.role
     };
 
     next();
@@ -68,4 +98,4 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { authenticateToken, requireAdmin };
+module.exports = { authenticateToken, requireAdmin, invalidateAuthCache };

@@ -1,6 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DonationReport from "./DonationReport";
-import AdminPanel from "./components/AdminPanel";
 import { CountUp, DonutChart, ProgressBar, TrendChart } from "./components/Charts";
 import { Confetti, Ring } from "./components/Effects";
 import { Glyph, Icon } from "./components/Glyphs";
@@ -20,6 +19,9 @@ import {
   pct,
   shiftMonth,
 } from "./api";
+
+// The admin console is only for administrators, so it is downloaded only when it is opened.
+const AdminPanel = lazy(() => import("./components/AdminPanel"));
 
 const PAGES = ["home", "dashboard", "donate", "projects", "announcements", "report", "profile", "admin"];
 const PRESETS = [500, 1000, 2500, 5000, 10000];
@@ -52,6 +54,10 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(() => Boolean(sessionStorage.getItem("welfare_token")));
   // True once the signed-in user is known, so later token changes refresh data quietly instead of blanking the page.
   const hasSession = useRef(false);
+  // True right after sign-in, when the login response already carried the profile (no /auth/me needed).
+  const profileFresh = useRef(false);
+  // Blocks a second submit in the instant before React disables the button.
+  const submitting = useRef(false);
 
   const [mode, setMode] = useState("login");
   const [authOpen, setAuthOpen] = useState(false);
@@ -190,14 +196,13 @@ export default function App() {
   }, [fail]);
 
   const loadDashboard = useCallback(
-    async (currentToken) => {
+    async (currentToken, { skipProfile = false } = {}) => {
       if (!currentToken) return;
       try {
-        const [profile, summary] = await Promise.all([
-          api("/auth/me", { token: currentToken }),
-          api("/dashboard", { token: currentToken }),
-        ]);
-        setUser(profile.user);
+        // Both requests start together; the profile one is skipped when sign-in just returned it.
+        const profilePromise = skipProfile ? null : api("/auth/me", { token: currentToken });
+        const summary = await api("/dashboard", { token: currentToken });
+        if (profilePromise) setUser((await profilePromise).user);
         setDashboard(summary);
       } catch (e) {
         if (e.status === 401) {
@@ -224,7 +229,9 @@ export default function App() {
   useEffect(() => {
     if (token) {
       if (!hasSession.current) setAuthLoading(true);
-      loadDashboard(token).finally(() => { hasSession.current = true; });
+      const skipProfile = profileFresh.current;
+      profileFresh.current = false;
+      loadDashboard(token, { skipProfile }).finally(() => { hasSession.current = true; });
     } else {
       hasSession.current = false;
       setAuthLoading(false);
@@ -297,6 +304,8 @@ export default function App() {
 
   async function submitAuth(event) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     const formElement = event.currentTarget;
     const body = Object.fromEntries(new FormData(formElement).entries());
     const credentials = mode === "verify" ? pendingAuth.current : { email: body.email, password: body.password };
@@ -319,6 +328,7 @@ export default function App() {
       pendingAuth.current = null;
       sessionStorage.setItem("welfare_token", result.token);
       hasSession.current = true;
+      profileFresh.current = true;
       setUser(result.user);
       setToken(result.token);
       setAuthOpen(false);
@@ -334,6 +344,7 @@ export default function App() {
         setAuthError(e.message);
       }
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -625,7 +636,9 @@ export default function App() {
     );
   }
 
-  if (authLoading) {
+  // Reloading the page with a saved session: the public home page does not need the account, so show it
+  // straight away instead of a blank "loading" screen.
+  if (authLoading && page !== "home") {
     return (
       <div className="app-shell">
         <div className="panel" style={{ maxWidth: 480, margin: "100px auto" }}>
@@ -1273,7 +1286,9 @@ export default function App() {
                 {!user && <button className="button button-primary" onClick={() => openAuth("login")}>{tr("Sign in", "لاگ اِن")}</button>}
               </section>
             ) : (
-              <AdminPanel token={token} tr={tr} projects={projects} reloadPublic={loadPublic} notify={notify} fail={fail} currentUserId={user.id} />
+              <Suspense fallback={<section className="panel" aria-busy="true"><div className="skeleton-line wide" /><div className="skeleton-line" /></section>}>
+                <AdminPanel token={token} tr={tr} projects={projects} reloadPublic={loadPublic} notify={notify} fail={fail} currentUserId={user.id} />
+              </Suspense>
             )
           )}
         </section>

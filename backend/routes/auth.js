@@ -3,7 +3,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("../config/db");
-const { authenticateToken } = require("../middleware/auth");
+const { authenticateToken, invalidateAuthCache } = require("../middleware/auth");
 const rateLimit = require("../middleware/rateLimit");
 const crypto = require("crypto");
 const { sendOtpEmail } = require("../services/mailer");
@@ -20,6 +20,10 @@ const OTP_MAX_ATTEMPTS = 5;
 const OTP_RESEND_SECONDS = 60;
 
 const router = express.Router();
+
+function elapsedMs(since) {
+  return Math.round(Number(process.hrtime.bigint() - since) / 1e6);
+}
 
 function hashOtp(code) {
   return crypto
@@ -67,6 +71,8 @@ function sessionFor(user) {
       id: user.id,
       full_name: user.full_name,
       email: user.email,
+      phone: user.phone ?? null,
+      created_at: user.created_at ?? null,
       role: user.role
     }
   };
@@ -217,11 +223,12 @@ router.post("/login", loginLimiter, async (req, res) => {
     }
 
     const [users] = await db.execute(
-      `SELECT id, full_name, email, password_hash, role, is_active, email_verified,
+      `SELECT id, full_name, email, phone, created_at, password_hash, role, is_active, email_verified,
               TIMESTAMPDIFF(SECOND, otp_sent_at, NOW()) AS otp_age
        FROM users WHERE email = ?`,
       [String(email).trim().toLowerCase()]
     );
+    const lookupMs = elapsedMs(loginStarted);
 
     if (!users.length) {
       return res.status(401).json({
@@ -237,10 +244,12 @@ router.post("/login", loginLimiter, async (req, res) => {
       });
     }
 
+    const hashStarted = process.hrtime.bigint();
     const validPassword = await bcrypt.compare(
-      password,
+      String(password),
       user.password_hash
     );
+    const hashMs = elapsedMs(hashStarted);
 
     if (!validPassword) {
       return res.status(401).json({
@@ -273,6 +282,10 @@ router.post("/login", loginLimiter, async (req, res) => {
       });
     }
 
+    // Safe timing only: no email, password, token or code is ever logged.
+    res.set("Server-Timing", `db;dur=${lookupMs}, bcrypt;dur=${hashMs}, total;dur=${elapsedMs(loginStarted)}`);
+    console.log(`[login] ok db=${lookupMs}ms bcrypt=${hashMs}ms total=${elapsedMs(loginStarted)}ms`);
+
     res.json({
       message: "Login successful.",
       ...sessionFor(user)
@@ -297,7 +310,7 @@ async function findPendingUser(req, res) {
   }
 
   const [users] = await db.execute(
-    `SELECT id, full_name, email, password_hash, role, is_active, email_verified,
+    `SELECT id, full_name, email, phone, created_at, password_hash, role, is_active, email_verified,
             otp_hash, otp_attempts,
             (otp_expires_at IS NOT NULL AND otp_expires_at > NOW()) AS otp_live,
             TIMESTAMPDIFF(SECOND, otp_sent_at, NOW()) AS otp_age
@@ -371,6 +384,8 @@ router.post("/verify-otp", loginLimiter, async (req, res) => {
        WHERE id = ?`,
       [user.id]
     );
+
+    invalidateAuthCache(user.id);
 
     res.json({
       message: "Email verified.",

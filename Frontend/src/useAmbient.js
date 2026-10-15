@@ -106,6 +106,8 @@ export function useAmbient() {
     const seen = new WeakSet();
     const timers = new Set();
 
+    // Reveal slightly BEFORE an element scrolls into view (positive bottom margin), so fast scrolling
+    // never shows an empty gap. threshold 0 fires as soon as one pixel is inside the extended area.
     const io = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -116,25 +118,24 @@ export function useAmbient() {
           // Hand transitions back to the element's own hover styles once revealed.
           const timer = setTimeout(() => {
             delete el.dataset.rv;
-            el.style.removeProperty("--rv-i");
             timers.delete(timer);
-          }, 1100);
+          }, 450);
           timers.add(timer);
         }
       },
-      { threshold: 0.08, rootMargin: "0px 0px -6% 0px" }
+      { threshold: 0, rootMargin: "0px 0px 35% 0px" }
     );
 
     const register = (root) => {
       const found = root.matches?.(REVEAL) ? [root, ...root.querySelectorAll(REVEAL)] : root.querySelectorAll?.(REVEAL) || [];
-      let order = 0;
+      const lowerEdge = window.innerHeight * 1.35;
 
       for (const el of found) {
         if (seen.has(el) || el.closest(".hero-x, .auth-modal, .toast-stack")) continue;
         seen.add(el);
+        // Anything already on (or just below) the first screen is shown immediately, never hidden first.
+        if (el.getBoundingClientRect().top < lowerEdge) continue;
         el.dataset.rv = "out";
-        el.style.setProperty("--rv-i", String(Math.min(order, 5)));
-        order += 1;
         io.observe(el);
       }
     };

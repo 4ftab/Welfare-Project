@@ -16,22 +16,22 @@ router.get("/monthly", async (req, res) => {
 
     const monthStart = `${month}-01`;
 
-    const [previousDonations] = await db.execute(
+    // The four totals are independent, so they are fetched together.
+    const [[previousDonations], [previousExpenses], [monthlyDonations], [monthlyExpenses]] = await Promise.all([
+    db.execute(
       `SELECT COALESCE(SUM(amount), 0) AS total
        FROM donations
        WHERE payment_status = 'completed'
          AND COALESCE(donated_at, created_at) < ?`,
       [monthStart]
-    );
-
-    const [previousExpenses] = await db.execute(
+    ),
+    db.execute(
       `SELECT COALESCE(SUM(amount), 0) AS total
        FROM expenses
        WHERE expense_date < ?`,
       [monthStart]
-    );
-
-    const [monthlyDonations] = await db.execute(
+    ),
+    db.execute(
       `SELECT COALESCE(SUM(amount), 0) AS total,
               COUNT(*) AS count
        FROM donations
@@ -39,16 +39,16 @@ router.get("/monthly", async (req, res) => {
          AND COALESCE(donated_at, created_at) >= ?
          AND COALESCE(donated_at, created_at) < DATE_ADD(?, INTERVAL 1 MONTH)`,
       [monthStart, monthStart]
-    );
-
-    const [monthlyExpenses] = await db.execute(
+    ),
+    db.execute(
       `SELECT COALESCE(SUM(amount), 0) AS total,
               COUNT(*) AS count
        FROM expenses
        WHERE expense_date >= ?
          AND expense_date < DATE_ADD(?, INTERVAL 1 MONTH)`,
       [monthStart, monthStart]
-    );
+    )
+    ]);
 
     const openingBalance =
       Number(previousDonations[0].total) -

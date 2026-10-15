@@ -1,6 +1,19 @@
 
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import { useEffect } from "react";
+
+// jsPDF is large and only needed when a report is requested, so it is fetched separately from the main
+// bundle (and pre-fetched as soon as the report buttons are on screen).
+let jsPDF;
+let autoTable;
+let pdfLoading;
+
+function loadPdfLibraries() {
+  pdfLoading ||= Promise.all([import("jspdf"), import("jspdf-autotable")]).then(([core, table]) => {
+    jsPDF = core.jsPDF;
+    autoTable = table.default;
+  });
+  return pdfLoading;
+}
 
 const COLORS = {
   emerald: [5, 100, 78],
@@ -380,7 +393,12 @@ function createDonationPDF({ user, donations, summary }) {
 }
 
 export default function DonationReport({ user, donations = [], summary }) {
-  const handleDownload = () => {
+  useEffect(() => {
+    loadPdfLibraries().catch(() => {});
+  }, []);
+
+  const handleDownload = async () => {
+    await loadPdfLibraries();
     const doc = createDonationPDF({ user, donations, summary });
 
     const safeName = String(
@@ -392,7 +410,8 @@ export default function DonationReport({ user, donations = [], summary }) {
     doc.save(`Nojawan_Itehad_Donation_Report_${safeName}.pdf`);
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    await loadPdfLibraries();
     const doc = createDonationPDF({ user, donations, summary });
     const blobUrl = doc.output("bloburl");
     const printWindow = window.open(blobUrl, "_blank");

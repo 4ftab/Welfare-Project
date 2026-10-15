@@ -1,23 +1,57 @@
 export const API = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-export async function api(path, { token, ...options } = {}) {
-  const response = await fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  });
+// The free Render server can take ~30-50 s to wake up, so requests get a generous but finite timeout.
+const TIMEOUT_MS = 45000;
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data.message || "Request failed");
-    error.status = response.status;
-    error.code = data.code;
-    throw error;
+// GET requests that are already on their way are shared, so two components asking for the same
+// data at once cause one network call. Keyed by token + path so users never share data.
+const inFlight = new Map();
+
+async function send(path, { token, timeout = TIMEOUT_MS, ...options }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(`${API}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options?.headers,
+      },
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data.message || "Request failed");
+      error.status = response.status;
+      error.code = data.code;
+      throw error;
+    }
+    return data;
+  } catch (e) {
+    if (e.name === "AbortError") {
+      throw new Error("The server is taking too long to respond. It may be waking up; please try again in a moment.", { cause: e });
+    }
+    if (e instanceof TypeError) {
+      throw new Error("Could not reach the server. Please check your internet connection and try again.", { cause: e });
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  return data;
+}
+
+export function api(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET") return send(path, options);
+
+  const key = `${options.token || ""} ${path}`;
+  if (!inFlight.has(key)) {
+    inFlight.set(key, send(path, options).finally(() => inFlight.delete(key)));
+  }
+  return inFlight.get(key);
 }
 
 // Download an authenticated file (e.g. CSV export).
