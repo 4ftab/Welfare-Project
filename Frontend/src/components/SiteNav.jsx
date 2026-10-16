@@ -11,8 +11,13 @@ export default function SiteNav({ tr, items, page, user, isAdmin, isUrdu, go, on
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => e.key === "Escape" && setOpen(false);
+    const onResize = () => window.innerWidth > 1180 && setOpen(false);
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+    };
   }, [open]);
 
   const navigate = (key) => {
@@ -95,12 +100,32 @@ export default function SiteNav({ tr, items, page, user, isAdmin, isUrdu, go, on
             {item.label}
           </button>
         ))}
-        {!user && (
-          <button type="button" className="x-sheet-link" onClick={() => { setOpen(false); onSignIn(); }}>
-            <span className="x-sheet-icon" aria-hidden="true"><Icon name="signin" size={18} /></span>
-            {tr("Sign in / Register", "لاگ اِن / رجسٹریشن")}
+        <div className="x-sheet-foot">
+          {user && (
+            <div className="x-sheet-user">
+              <span className="x-avatar" aria-hidden="true">{(user.full_name || "?").trim().charAt(0).toUpperCase()}</span>
+              <span className="x-user-text">
+                <strong>{user.full_name}</strong>
+                <small>{isAdmin ? tr("Administrator", "منتظم") : tr("Donor", "عطیہ دہندہ")}</small>
+              </span>
+            </div>
+          )}
+          <button type="button" className="x-chip x-sheet-donate" onClick={() => { setOpen(false); onDonate(); }}>
+            {tr("Donate", "عطیہ")}
           </button>
-        )}
+          <button type="button" className="x-chip x-sheet-lang" onClick={() => { setOpen(false); onToggleLanguage(); }} aria-label="Change website language">
+            {isUrdu ? "English" : "اردو"}
+          </button>
+          {user ? (
+            <button type="button" className="x-chip x-sheet-logout" onClick={() => { setOpen(false); onLogout(); }}>
+              {tr("Log out", "لاگ آؤٹ")}
+            </button>
+          ) : (
+            <button type="button" className="x-chip x-signin x-sheet-signin" onClick={() => { setOpen(false); onSignIn(); }}>
+              {tr("Sign in / Register", "لاگ اِن / رجسٹریشن")}
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

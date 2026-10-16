@@ -106,6 +106,8 @@ body::before {
 .x-brand {
   position: relative;
   display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 10px;
   color: var(--x-ink);
@@ -127,6 +129,8 @@ body::before {
 }
 
 .x-brand-text {
+  min-width: 0;
+  white-space: nowrap;
   display: flex;
   flex-direction: column;
   line-height: 1.15;
@@ -145,7 +149,8 @@ body::before {
 .x-links {
   position: relative;
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   justify-content: center;
   gap: 2px;
 }
@@ -155,6 +160,7 @@ body::before {
   padding: 9px 15px;
   border: 0;
   border-radius: 999px;
+  white-space: nowrap;
   color: var(--x-ink-2);
   font: 700 13.5px/1 'Manrope', sans-serif;
   background: transparent;
@@ -176,14 +182,17 @@ body::before {
 .x-actions {
   position: relative;
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
 }
 
 .x-donate {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 7px;
+  white-space: nowrap;
   padding: 11px 18px;
   border: 0;
   border-radius: 999px;
@@ -276,6 +285,7 @@ body::before {
 
 .x-burger {
   display: none;
+  flex: none;
   flex-direction: column;
   justify-content: center;
   gap: 4px;
@@ -300,7 +310,16 @@ body::before {
 .x-nav[data-open] .x-burger span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
 .x-sheet {
-  margin-top: 10px;
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline: clamp(10px, 2vw, 28px);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 4px;
+  max-height: calc(100dvh - 96px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 28px;
@@ -314,6 +333,22 @@ body::before {
 .x-sheet[hidden] {
   display: none;
 }
+
+.x-sheet-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(10, 58, 48, 0.12);
+}
+
+.x-sheet-foot .x-chip { flex: 1 1 auto; padding: 13px 16px; text-align: center; }
+.x-sheet-user { display: flex; flex: 1 1 100%; align-items: center; gap: 10px; }
+.x-sheet-user .x-user-text { display: flex; max-width: none; }
+.x-sheet-donate, .x-sheet-lang { display: none; }
 
 .x-sheet-link {
   display: flex;
@@ -354,12 +389,13 @@ body::before {
   to { opacity: 1; transform: none; }
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1320px) {
   .x-user-text { display: none; }
   .x-link { padding: 9px 11px; }
 }
 
-@media (max-width: 920px) {
+/* Collapse to the burger menu before links, Urdu and Log out can collide */
+@media (max-width: 1180px) {
   .x-links, .x-logout { display: none; }
   .x-burger { display: flex; }
   .x-actions { margin-inline-start: auto; }
@@ -367,8 +403,15 @@ body::before {
 
 @media (max-width: 480px) {
   .x-brand-text small { display: none; }
-  .x-nav-bar { gap: 8px; }
+  .x-nav-bar { gap: 8px; padding-inline: 8px; }
   .x-lang { display: none; }
+  .x-sheet { grid-template-columns: 1fr 1fr; }
+  .x-sheet-donate, .x-sheet-lang { display: block; }
+}
+
+@media (max-width: 360px) {
+  .x-brand-text { display: none; }
+  .x-sheet { grid-template-columns: 1fr; }
 }
 
 /* ───────────────────────── Hero ───────────────────────── */
