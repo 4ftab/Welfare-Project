@@ -5,8 +5,10 @@ import { Confetti, Ring } from "./components/Effects";
 import { Glyph, Icon } from "./components/Glyphs";
 import { glyphFor } from "./components/glyphRules";
 import Village from "./components/Village";
+import SiteNav from "./components/SiteNav";
+import SiteFooter from "./components/SiteFooter";
 import { useAmbient } from "./useAmbient";
-import { useLanguage } from "./LanguageContext";
+import { useLanguage } from "./languageContext";
 import {
   api,
   compactMoney,
@@ -223,6 +225,8 @@ export default function App() {
   );
 
   useEffect(() => {
+    // Fetch-on-mount: state is only set after the requests resolve.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPublic();
   }, [loadPublic]);
 
@@ -247,6 +251,7 @@ export default function App() {
   }, [month, fail]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (page === "report") loadReport();
   }, [page, loadReport]);
 
@@ -260,12 +265,12 @@ export default function App() {
     window.history.replaceState(null, "", window.location.pathname + window.location.hash);
 
     if (!token) {
-      fail("Please sign in to confirm your payment.");
+      queueMicrotask(() => fail("Please sign in to confirm your payment."));
       return;
     }
 
     if (kind === "cancel") {
-      fail("Payment was cancelled. Your pledge is still pending and can be completed any time from your dashboard.");
+      queueMicrotask(() => fail("Payment was cancelled. Your pledge is still pending and can be completed any time from your dashboard."));
       return;
     }
 
@@ -528,13 +533,13 @@ export default function App() {
 
   const navItems = [
     { key: "home", label: tr("Home", "ہوم"), icon: "home" },
-    ...(user ? [{ key: "dashboard", label: tr("My dashboard", "میرا ڈیش بورڈ"), icon: "dashboard" }] : []),
-    { key: "projects", label: tr("Welfare Projects", "فلاحی منصوبے"), icon: "projects" },
-    { key: "announcements", label: tr("Announcements", "اعلانات"), icon: "announcements" },
-    { key: "report", label: tr("Financial Reports", "مالیاتی رپورٹس"), icon: "report" },
+    ...(user ? [{ key: "dashboard", label: tr("My dashboard", "میرا ڈیش بورڈ"), short: tr("Dashboard", "ڈیش بورڈ"), icon: "dashboard" }] : []),
+    { key: "projects", label: tr("Welfare Projects", "فلاحی منصوبے"), short: tr("Projects", "منصوبے"), icon: "projects" },
+    { key: "announcements", label: tr("Announcements", "اعلانات"), short: tr("News", "خبریں"), icon: "announcements" },
+    { key: "report", label: tr("Financial Reports", "مالیاتی رپورٹس"), short: tr("Reports", "رپورٹس"), icon: "report" },
     { key: "donate", label: tr("Donate", "عطیہ دیں"), icon: "donate" },
-    ...(user ? [{ key: "profile", label: tr("My profile", "میری پروفائل"), icon: "profile" }] : []),
-    ...(isAdmin ? [{ key: "admin", label: tr("Admin Console", "ایڈمن کنسول"), icon: "admin" }] : []),
+    ...(user ? [{ key: "profile", label: tr("My profile", "میری پروفائل"), short: tr("Profile", "پروفائل"), icon: "profile" }] : []),
+    ...(isAdmin ? [{ key: "admin", label: tr("Admin Console", "ایڈمن کنسول"), short: tr("Admin", "ایڈمن"), icon: "admin" }] : []),
   ];
 
   const filteredProjects = useMemo(() => {
@@ -598,7 +603,7 @@ export default function App() {
     const progress = pct(project.raised, project.budget);
     const accepting = project.status === "planned" || project.status === "ongoing";
     return (
-      <article className="panel project-card" key={project.id}>
+      <article className="panel project-card x-project" key={project.id}>
         <div className="project-art" data-tone={project.id % 4}>
           <span className="art-glyph"><Glyph name={glyphFor(`${project.title} ${project.description || ""}`)} size={30} /></span>
           <span className={`status ${project.status}`}>{statusLabel(project.status)}</span>
@@ -651,7 +656,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell x-app">
       <div id="scroll-progress" aria-hidden="true" />
       <Confetti burst={burst} />
       {paying && (
@@ -663,113 +668,68 @@ export default function App() {
       )}
       <a className="skip-link" href="#main-content">{tr("Skip to content", "مواد پر جائیں")}</a>
 
-      <header className="topbar">
-        <a className="brand" href="#/home" onClick={(e) => { e.preventDefault(); go("home"); }}>
-          <span className="brand-mark">NI</span>
-          <span>
-            <strong>{tr("Nojawan Itehad", "نوجوان اتحاد")}</strong>
-            <small>{tr("Welfare · Chitta Batta", "ویلفیئر · چھٹہ بٹہ")}</small>
-          </span>
-        </a>
-
-        <div className="top-actions">
-          <button className="button button-light nav-donate" data-magnetic onClick={() => donateTo("")}>♡ {tr("Donate", "عطیہ")}</button>
-          <button type="button" className="button button-light" onClick={toggleLanguage} aria-label="Change website language">
-            {isUrdu ? "English" : "اردو"}
-          </button>
-
-          {user ? (
-            <>
-              <span className="welcome">
-                <strong>{user.full_name}</strong>
-                <small>{isAdmin ? tr("Administrator", "منتظم") : tr("Donor", "عطیہ دہندہ")}</small>
-              </span>
-              <button className="button button-light" onClick={logout}>{tr("Log out", "لاگ آؤٹ")}</button>
-            </>
-          ) : (
-            <button className="button button-primary" onClick={() => openAuth("login")}>{tr("Sign in", "لاگ اِن")}</button>
-          )}
-        </div>
-      </header>
+      <SiteNav
+        tr={tr}
+        items={navItems}
+        page={page}
+        user={user}
+        isAdmin={isAdmin}
+        isUrdu={isUrdu}
+        go={go}
+        onDonate={() => donateTo("")}
+        onSignIn={() => openAuth("login")}
+        onLogout={logout}
+        onToggleLanguage={toggleLanguage}
+      />
 
       <main className="main-layout" id="main-content">
-        <aside className="sidebar">
-          <p className="side-label">{tr("MAIN MENU", "مرکزی مینو")}</p>
-
-          {navItems.map((item) => (
-            <button key={item.key} className={`nav-item ${page === item.key ? "active" : ""}`} aria-current={page === item.key ? "page" : undefined} onClick={() => go(item.key)}>
-              <span className="nav-icon" aria-hidden="true"><Icon name={item.icon} /></span>
-              <span className="nav-label">{item.label}</span>
-              <span className="nav-arrow" aria-hidden="true">›</span>
-            </button>
-          ))}
-
-          {!user && (
-            <button className="nav-item" onClick={() => openAuth("login")}>
-              <span className="nav-icon" aria-hidden="true"><Icon name="signin" /></span>
-              <span className="nav-label">{tr("Sign in / Register", "لاگ اِن / رجسٹریشن")}</span>
-              <span className="nav-arrow" aria-hidden="true">›</span>
-            </button>
-          )}
-
-          <div className="sidebar-note">
-            <div className="trust-icon"><Icon name="check" size={18} /></div>
-            <strong>{tr("Built on trust", "اعتماد کی بنیاد پر")}</strong>
-            <p>{tr("Clear records help the community understand how contributions are recorded and spent.", "شفاف ریکارڈ کمیونٹی کو یہ سمجھنے میں مدد دیتا ہے کہ عطیات کیسے درج اور خرچ کیے جاتے ہیں۔")}</p>
-            {stats && <p className="sidebar-stat">{tr("Raised so far", "اب تک جمع")}: <strong>PKR {compactMoney(stats.total_raised)}</strong></p>}
-          </div>
-        </aside>
 
         <section className="content" key={page}>
           {/* ════════════ HOME ════════════ */}
           {page === "home" && (
             <>
-              <section className="hero hero-x">
-                <div className="aurora" aria-hidden="true"><i /><i /><i /></div>
-                <div className="hero-pattern" aria-hidden="true" />
-
-                <div className="hero-copy">
-                  <span className="pill hero-in" style={{ "--i": 0 }}><span className="pulse" />{tr("Live · open books · community-led", "براہِ راست · کھلا حساب · کمیونٹی کی قیادت")}</span>
-                  <h1>
+              {/* Editorial hero: oversized type on ivory, an arch-framed village scene, floating glass cards */}
+              <section className="x-hero">
+                <div className="x-hero-copy">
+                  <span className="x-kicker"><span className="pulse" />{tr("Live · open books · community-led", "براہِ راست · کھلا حساب · کمیونٹی کی قیادت")}</span>
+                  <h1 className="x-h1">
                     <Words text={tr("Small contributions.", "چھوٹا سا تعاون۔")} start={1} />
                     <br />
-                    <Words className="grad-text" text={tr("Meaningful change.", "بامعنی تبدیلی۔")} start={4} />
+                    <Words className="x-h1-accent" text={tr("Meaningful change.", "بامعنی تبدیلی۔")} start={4} />
                   </h1>
-                  <p className="hero-in" style={{ "--i": 6 }}>{tr("Supporting welfare initiatives in Chitta Batta through community participation, responsible record keeping, and financial transparency.", "چھٹہ بٹہ میں کمیونٹی کی شرکت، ذمہ دارانہ ریکارڈ اور مالی شفافیت کے ذریعے فلاحی سرگرمیوں کی مدد کرنا۔")}</p>
-                  <div className="hero-actions hero-in" style={{ "--i": 7 }}>
-                    <button className="button button-gold" data-magnetic onClick={() => donateTo("")}>♡ {tr("Donate now", "ابھی عطیہ دیں")}</button>
-                    <button className="button button-ghost" data-magnetic onClick={() => go("projects")}>{tr("Explore our projects", "ہمارے منصوبے دیکھیں")} →</button>
+                  <p className="x-lede">{tr("Supporting welfare initiatives in Chitta Batta through community participation, responsible record keeping, and financial transparency.", "چھٹہ بٹہ میں کمیونٹی کی شرکت، ذمہ دارانہ ریکارڈ اور مالی شفافیت کے ذریعے فلاحی سرگرمیوں کی مدد کرنا۔")}</p>
+                  <div className="x-cta-row">
+                    <button className="x-btn x-btn-gold" data-magnetic onClick={() => donateTo("")}>♡ {tr("Donate now", "ابھی عطیہ دیں")}</button>
+                    <button className="x-btn x-btn-ink" data-magnetic onClick={() => go("projects")}>{tr("Explore projects", "منصوبے دیکھیں")} →</button>
                   </div>
-                  <ul className="trust-row hero-in" style={{ "--i": 8 }}>
-                    <li><span aria-hidden="true"><Icon name="lock" size={13} /></span>{config.online_payments ? tr("Secure checkout by Safepay", "Safepay کے ذریعے محفوظ ادائیگی") : tr("Pledge in seconds", "چند سیکنڈ میں عطیہ")}</li>
-                    <li><span aria-hidden="true"><Icon name="report" size={13} /></span>{tr("Public monthly reports", "عوامی ماہانہ رپورٹس")}</li>
-                    <li><span aria-hidden="true"><Icon name="check" size={13} /></span>{tr("Only confirmed gifts are counted", "صرف تصدیق شدہ عطیات شمار ہوتے ہیں")}</li>
+                  <ul className="x-trust">
+                    <li><Icon name="lock" size={14} />{config.online_payments ? tr("Secure checkout by Safepay", "Safepay کے ذریعے محفوظ ادائیگی") : tr("Pledge in seconds", "چند سیکنڈ میں عطیہ")}</li>
+                    <li><Icon name="report" size={14} />{tr("Public monthly reports", "عوامی ماہانہ رپورٹس")}</li>
+                    <li><Icon name="check" size={14} />{tr("Only confirmed gifts are counted", "صرف تصدیق شدہ عطیات شمار ہوتے ہیں")}</li>
                   </ul>
                 </div>
 
-                <div className="hero-stage">
-                  <div className="hero-scene hero-in" style={{ "--i": 3 }}>
+                <div className="x-stage">
+                  <div className="x-arch">
                     <Village />
-                    <span className="scene-tag"><span className="pulse" />{tr("Chitta Batta", "چھٹہ بٹہ")}</span>
+                    <span className="x-place"><span className="pulse" />{tr("Chitta Batta", "چھٹہ بٹہ")}</span>
                   </div>
-                  <div className="hero-ring-card hero-in" style={{ "--i": 9 }}>
-                    <Ring size={112} stroke={10} value={fundedPct}>
-                      <strong>{Math.round(fundedPct)}%</strong>
-                    </Ring>
-                    <div className="ring-meta">
-                      <span>{tr("of project budgets funded", "منصوبوں کا بجٹ پورا")}</span>
+                  <div className="x-float x-float-ring">
+                    <Ring size={96} stroke={9} value={fundedPct}><strong>{Math.round(fundedPct)}%</strong></Ring>
+                    <div>
+                      <small>{tr("of project budgets funded", "منصوبوں کا بجٹ پورا")}</small>
                       <strong>PKR {compactMoney(stats?.total_raised)}</strong>
-                      <small>{tr("raised so far", "اب تک جمع")}</small>
                     </div>
                   </div>
-                  <div className="hero-glass g2 hero-in" style={{ "--i": 10 }}>
+                  <div className="x-float x-float-donors">
                     <small>{tr("Community donors", "عطیہ دہندگان")}</small>
                     <strong><CountUp value={stats?.donor_count} /></strong>
                   </div>
-                  <div className="hero-glass g3 hero-in" style={{ "--i": 11 }}>
+                  <div className="x-float x-float-projects">
                     <small>{tr("Active projects", "جاری منصوبے")}</small>
                     <strong><CountUp value={stats?.projects_ongoing} /></strong>
                   </div>
+                  <div className="x-stamp" aria-hidden="true"><span>{tr("OPEN", "کھلا")}</span><b>{tr("BOOKS", "حساب")}</b></div>
                 </div>
               </section>
 
@@ -793,79 +753,131 @@ export default function App() {
                 </div>
               </div>
 
-              <section className="impact-strip" aria-label={tr("Our impact", "ہمارا اثر")}>
-                <article><strong><CountUp value={stats?.total_raised} format={(n) => `PKR ${compactMoney(n)}`} /></strong><span>{tr("Funds raised", "جمع شدہ فنڈز")}</span></article>
-                <article><strong><CountUp value={stats?.donor_count} /></strong><span>{tr("Generous donors", "فراخ دل عطیہ دہندگان")}</span></article>
-                <article><strong><CountUp value={stats?.projects_total} /></strong><span>{tr("Welfare projects", "فلاحی منصوبے")}</span></article>
-                <article><strong><CountUp value={stats?.total_spent} format={(n) => `PKR ${compactMoney(n)}`} /></strong><span>{tr("Spent on the community", "کمیونٹی پر خرچ")}</span></article>
-              </section>
-
-              <section className="panel about" id="about">
-                <span className="eyebrow">{tr("WHO WE ARE", "ہم کون ہیں")}</span>
-                <h2>{tr("Neighbours helping neighbours", "پڑوسی، پڑوسیوں کے مددگار")}</h2>
-                <p className="muted lead">
-                  {tr(
-                    "Nojawan Itehad is a youth-led welfare committee serving the people of Chitta Batta. Contributions are pooled, recorded and spent on local needs — and every rupee is reported openly so that donors can see the difference they make.",
-                    "نوجوان اتحاد چھٹہ بٹہ کے لوگوں کی خدمت کرنے والی نوجوانوں کی فلاحی کمیٹی ہے۔ عطیات جمع، درج اور مقامی ضرورتوں پر خرچ کیے جاتے ہیں، اور ہر روپے کی رپورٹ کھلے عام دی جاتی ہے۔"
-                  )}
-                </p>
-                <div className="value-grid">
-                  <div className="value"><span className="value-icon">◈</span><h3>{tr("Transparent", "شفاف")}</h3><p className="muted">{tr("Monthly public reports show opening balance, donations, expenses and closing balance.", "ماہانہ عوامی رپورٹس میں ابتدائی بیلنس، عطیات، اخراجات اور اختتامی بیلنس دکھایا جاتا ہے۔")}</p></div>
-                  <div className="value"><span className="value-icon">❖</span><h3>{tr("Accountable", "جواب دہ")}</h3><p className="muted">{tr("Every administrative action is written to an activity log.", "ہر انتظامی کارروائی سرگرمی لاگ میں درج ہوتی ہے۔")}</p></div>
-                  <div className="value"><span className="value-icon">✿</span><h3>{tr("Community-led", "کمیونٹی کی قیادت")}</h3><p className="muted">{tr("Projects are chosen by and for the people of Chitta Batta.", "منصوبے چھٹہ بٹہ کے لوگوں کی طرف سے اور انہی کے لیے منتخب ہوتے ہیں۔")}</p></div>
-                </div>
-              </section>
-
-              <section className="panel">
-                <span className="eyebrow">{tr("HOW IT WORKS", "یہ کیسے کام کرتا ہے")}</span>
-                <h2>{tr("Giving in three simple steps", "تین آسان مراحل میں عطیہ")}</h2>
-                <ol className="steps">
-                  <li><span className="step-no">1</span><div><h3>{tr("Create an account", "اکاؤنٹ بنائیں")}</h3><p className="muted">{tr("Register free to keep your own donation history.", "اپنی عطیات کی تاریخ محفوظ رکھنے کے لیے مفت رجسٹر کریں۔")}</p></div></li>
-                  <li><span className="step-no">2</span><div><h3>{config.online_payments ? tr("Give securely", "محفوظ طریقے سے عطیہ دیں") : tr("Pledge your gift", "عطیہ درج کریں")}</h3><p className="muted">{config.online_payments ? tr("Choose an amount and a project, then pay on Safepay's secure page.", "رقم اور منصوبہ منتخب کریں، پھر Safepay کے محفوظ صفحے پر ادائیگی کریں۔") : tr("Choose an amount and, if you like, a specific project.", "رقم اور چاہیں تو کوئی مخصوص منصوبہ منتخب کریں۔")}</p></div></li>
-                  <li><span className="step-no">3</span><div><h3>{tr("See it counted", "اسے شمار ہوتا دیکھیں")}</h3><p className="muted">{config.online_payments ? tr("Once Safepay confirms your payment it is counted automatically and appears in the public reports.", "Safepay کی تصدیق کے بعد آپ کا عطیہ خود بخود شمار ہوتا ہے اور عوامی رپورٹس میں شامل ہو جاتا ہے۔") : tr("Once received, an administrator confirms it and it appears in the public reports.", "رقم ملنے پر ایڈمن تصدیق کرتا ہے اور یہ عوامی رپورٹس میں شامل ہو جاتی ہے۔")}</p></div></li>
-                </ol>
-              </section>
-
-              {featured.length > 0 && (
-                <>
-                  <div className="section-heading">
-                    <div>
-                      <span className="eyebrow">{tr("WHERE YOUR GIFT GOES", "آپ کا عطیہ کہاں جاتا ہے")}</span>
-                      <h2>{tr("Projects needing support", "مدد کے منتظر منصوبے")}</h2>
-                    </div>
-                    <button className="button button-light" onClick={() => go("projects")}>{tr("All projects", "تمام منصوبے")} →</button>
+              {/* Bento grid of live community numbers */}
+              <section className="x-bento" aria-label={tr("Our impact", "ہمارا اثر")}>
+                <article className="x-tile x-t-raised">
+                  <span className="x-label">{tr("Funds raised", "جمع شدہ فنڈز")}</span>
+                  <strong className="x-big"><CountUp value={stats?.total_raised} format={(n) => `PKR ${compactMoney(n)}`} /></strong>
+                  <div className="x-meter">
+                    <ProgressBar value={fundedPct} tone="amber" label={tr("Project budgets funded", "منصوبوں کا بجٹ پورا")} />
+                    <small>{Math.round(fundedPct)}% {tr("of project budgets funded", "منصوبوں کا بجٹ پورا")}</small>
                   </div>
-                  <div className="cards-grid three">{featured.map((p) => renderProject(p))}</div>
-                </>
-              )}
+                  <small className="x-foot">{tr("Balance in hand", "موجودہ بیلنس")}: <b>{money(stats?.balance)}</b></small>
+                </article>
 
-              <div className="two-col">
-                <section className="panel">
-                  <span className="eyebrow">{tr("OPEN BOOKS", "کھلا حساب")}</span>
-                  <h3>{tr("Where the money goes", "رقم کہاں خرچ ہوتی ہے")}</h3>
+                <article className="x-tile x-t-donors">
+                  <span className="x-label">{tr("Generous donors", "فراخ دل عطیہ دہندگان")}</span>
+                  <strong className="x-big"><CountUp value={stats?.donor_count} /></strong>
+                  <small>{stats?.donation_count ?? 0} {tr("completed donations", "مکمل عطیات")}</small>
+                </article>
+
+                <article className="x-tile x-t-projects">
+                  <span className="x-label">{tr("Welfare projects", "فلاحی منصوبے")}</span>
+                  <strong className="x-big"><CountUp value={stats?.projects_total} /></strong>
+                  <small>{stats?.projects_ongoing ?? 0} {tr("ongoing now", "اب جاری")}</small>
+                </article>
+
+                <article className="x-tile x-t-spent">
+                  <span className="x-label">{tr("Spent on the community", "کمیونٹی پر خرچ")}</span>
+                  <strong className="x-big"><CountUp value={stats?.total_spent} format={(n) => `PKR ${compactMoney(n)}`} /></strong>
+                  <small>{tr("Every expense is on the public record", "ہر خرچ عوامی ریکارڈ پر ہے")}</small>
+                </article>
+
+                <article className="x-tile x-t-donut">
+                  <span className="x-label">{tr("Where the money goes", "رقم کہاں خرچ ہوتی ہے")}</span>
                   <DonutChart
                     data={(stats?.expense_categories || []).map((c) => ({ label: c.category, value: c.total }))}
                     emptyText={tr("Expense categories will appear here once expenses are recorded.", "اخراجات درج ہونے پر قسمیں یہاں دکھائی دیں گی۔")}
                   />
-                  <button className="button button-light" style={{ marginTop: 14 }} onClick={() => go("report")}>{tr("View monthly report", "ماہانہ رپورٹ دیکھیں")} →</button>
-                </section>
+                </article>
 
-                <section className="panel">
-                  <span className="eyebrow">{tr("LATEST NEWS", "تازہ خبریں")}</span>
-                  <h3>{tr("Community updates", "کمیونٹی اپ ڈیٹس")}</h3>
+                <article className="x-tile x-t-about" id="about">
+                  <span className="x-label">{tr("Who we are", "ہم کون ہیں")}</span>
+                  <h2>{tr("Neighbours helping neighbours", "پڑوسی، پڑوسیوں کے مددگار")}</h2>
+                  <p>{tr("Nojawan Itehad is a youth-led welfare committee serving the people of Chitta Batta. Contributions are pooled, recorded and spent on local needs — and every rupee is reported openly so that donors can see the difference they make.", "نوجوان اتحاد چھٹہ بٹہ کے لوگوں کی خدمت کرنے والی نوجوانوں کی فلاحی کمیٹی ہے۔ عطیات جمع، درج اور مقامی ضرورتوں پر خرچ کیے جاتے ہیں، اور ہر روپے کی رپورٹ کھلے عام دی جاتی ہے۔")}</p>
+                  <ul className="x-values">
+                    <li><b>{tr("Transparent", "شفاف")}</b><span>{tr("Monthly public reports", "ماہانہ عوامی رپورٹس")}</span></li>
+                    <li><b>{tr("Accountable", "جواب دہ")}</b><span>{tr("Every admin action is logged", "ہر انتظامی کارروائی درج")}</span></li>
+                    <li><b>{tr("Community-led", "کمیونٹی کی قیادت")}</b><span>{tr("Chosen by and for Chitta Batta", "چھٹہ بٹہ کی طرف سے اور انہی کے لیے")}</span></li>
+                  </ul>
+                </article>
+
+                <article className="x-tile x-t-books">
+                  <span className="x-label">{tr("Open books", "کھلا حساب")}</span>
+                  <h3>{tr("See exactly what came in and what went out.", "دیکھیں کتنا آیا اور کتنا گیا۔")}</h3>
+                  <button className="x-btn x-btn-ink" onClick={() => go("report")}>{tr("View monthly report", "ماہانہ رپورٹ دیکھیں")} →</button>
+                </article>
+              </section>
+
+              <section className="x-section">
+                <div className="x-section-head">
+                  <span className="x-eyebrow">{tr("HOW IT WORKS", "یہ کیسے کام کرتا ہے")}</span>
+                  <h2>{tr("Giving in three simple steps", "تین آسان مراحل میں عطیہ")}</h2>
+                </div>
+                <ol className="x-steps">
+                  <li className="x-step"><span className="x-step-no">1</span><h3>{tr("Create an account", "اکاؤنٹ بنائیں")}</h3><p>{tr("Register free to keep your own donation history.", "اپنی عطیات کی تاریخ محفوظ رکھنے کے لیے مفت رجسٹر کریں۔")}</p></li>
+                  <li className="x-step"><span className="x-step-no">2</span><h3>{config.online_payments ? tr("Give securely", "محفوظ طریقے سے عطیہ دیں") : tr("Pledge your gift", "عطیہ درج کریں")}</h3><p>{config.online_payments ? tr("Choose an amount and a project, then pay on Safepay's secure page.", "رقم اور منصوبہ منتخب کریں، پھر Safepay کے محفوظ صفحے پر ادائیگی کریں۔") : tr("Choose an amount and, if you like, a specific project.", "رقم اور چاہیں تو کوئی مخصوص منصوبہ منتخب کریں۔")}</p></li>
+                  <li className="x-step"><span className="x-step-no">3</span><h3>{tr("See it counted", "اسے شمار ہوتا دیکھیں")}</h3><p>{config.online_payments ? tr("Once Safepay confirms your payment it is counted automatically and appears in the public reports.", "Safepay کی تصدیق کے بعد آپ کا عطیہ خود بخود شمار ہوتا ہے اور عوامی رپورٹس میں شامل ہو جاتا ہے۔") : tr("Once received, an administrator confirms it and it appears in the public reports.", "رقم ملنے پر ایڈمن تصدیق کرتا ہے اور یہ عوامی رپورٹس میں شامل ہو جاتی ہے۔")}</p></li>
+                </ol>
+              </section>
+
+              {featured.length > 0 && (
+                <section className="x-section">
+                  <div className="x-section-head x-split">
+                    <div>
+                      <span className="x-eyebrow">{tr("WHERE YOUR GIFT GOES", "آپ کا عطیہ کہاں جاتا ہے")}</span>
+                      <h2>{tr("Projects needing support", "مدد کے منتظر منصوبے")}</h2>
+                    </div>
+                    <button className="x-btn x-btn-ink" onClick={() => go("projects")}>{tr("All projects", "تمام منصوبے")} →</button>
+                  </div>
+                  <div className="cards-grid three">{featured.map((p) => renderProject(p))}</div>
+                </section>
+              )}
+
+              <section className="x-section x-news-wrap">
+                <div className="x-ledger">
+                  <span className="x-label">{tr("Transparency preview", "شفافیت کی جھلک")}</span>
+                  <h3>{tr("Since the beginning", "آغاز سے اب تک")}</h3>
+                  <ul>
+                    <li><span>{tr("Total raised", "کل جمع")}</span><strong>{money(stats?.total_raised)}</strong></li>
+                    <li><span>{tr("Total spent", "کل خرچ")}</span><strong>{money(stats?.total_spent)}</strong></li>
+                    <li className="x-ledger-total"><span>{tr("Balance in hand", "موجودہ بیلنس")}</span><strong>{money(stats?.balance)}</strong></li>
+                  </ul>
+                </div>
+                <div className="x-news">
+                  <div className="x-section-head x-split">
+                    <div>
+                      <span className="x-eyebrow">{tr("LATEST NEWS", "تازہ خبریں")}</span>
+                      <h2>{tr("Community updates", "کمیونٹی اپ ڈیٹس")}</h2>
+                    </div>
+                    <button className="x-btn x-btn-ink" onClick={() => go("announcements")}>{tr("All announcements", "تمام اعلانات")} →</button>
+                  </div>
                   {announcements.slice(0, 3).map((a) => (
-                    <article className="mini-news" key={a.id}>
-                      <strong>{a.title}</strong>
-                      <p className="muted clamp">{a.body}</p>
-                      <small className="muted">{formatDate(a.created_at)}</small>
+                    <article className="x-news-item" key={a.id}>
+                      <time dateTime={a.created_at}>{formatDate(a.created_at)}</time>
+                      <div>
+                        <strong>{a.title}</strong>
+                        <p className="clamp">{a.body}</p>
+                      </div>
                     </article>
                   ))}
                   {!announcements.length && !publicLoading && <p className="muted">{tr("No announcements yet.", "ابھی کوئی اعلان نہیں۔")}</p>}
-                  <button className="button button-light" style={{ marginTop: 10 }} onClick={() => go("announcements")}>{tr("All announcements", "تمام اعلانات")} →</button>
-                </section>
-              </div>
+                </div>
+              </section>
 
-              <section className="panel">
+              <section className="x-cta-band">
+                <div>
+                  <span className="x-eyebrow">{tr("YOUR TURN", "اب آپ کی باری")}</span>
+                  <h2>{tr("Give once. Watch it work.", "ایک بار دیں۔ نتیجہ خود دیکھیں۔")}</h2>
+                  <p>{tr("Every confirmed gift is counted in the public report — no exceptions.", "ہر تصدیق شدہ عطیہ عوامی رپورٹ میں شمار ہوتا ہے۔")}</p>
+                </div>
+                <div className="x-cta-row">
+                  <button className="x-btn x-btn-gold" data-magnetic onClick={() => donateTo("")}>♡ {tr("Donate now", "ابھی عطیہ دیں")}</button>
+                  <button className="x-btn x-btn-glass" onClick={() => go("report")}>{tr("Read the report", "رپورٹ پڑھیں")}</button>
+                </div>
+              </section>
+
+<section className="panel x-faq">
                 <span className="eyebrow">FAQ</span>
                 <h2>{tr("Questions, answered", "آپ کے سوالات")}</h2>
                 <div className="faq">
@@ -876,7 +888,7 @@ export default function App() {
                 </div>
               </section>
 
-              <section className="panel contact" id="contact">
+<section className="panel contact" id="contact">
                 <div>
                   <span className="eyebrow">{tr("GET IN TOUCH", "رابطہ کریں")}</span>
                   <h2>{tr("We'd love to hear from you", "ہمیں آپ کے پیغام کا انتظار ہے")}</h2>
@@ -893,11 +905,12 @@ export default function App() {
             </>
           )}
 
+
           {/* ════════════ DASHBOARD ════════════ */}
           {page === "dashboard" && (
             <>
               {!user ? (
-                <section className="panel">
+                <section className="panel x-pagehead">
                   <span className="eyebrow">{tr("YOUR PERSONAL SPACE", "آپ کی ذاتی جگہ")}</span>
                   <h2>{tr("Sign in to see your dashboard", "ڈیش بورڈ دیکھنے کے لیے لاگ اِن کریں")}</h2>
                   <p className="muted">{tr("Register to review your donation records and follow your contributions.", "اپنے عطیات کا ریکارڈ دیکھنے کے لیے رجسٹر کریں۔")}</p>
@@ -905,16 +918,20 @@ export default function App() {
                 </section>
               ) : (
                 <>
-                  <div className="section-heading">
-                    <div>
-                      <span className="eyebrow">{tr("YOUR PERSONAL SPACE", "آپ کی ذاتی جگہ")}</span>
+                  <section className="x-welcome">
+                    <div className="x-welcome-copy">
+                      <span className="x-eyebrow">{tr("YOUR PERSONAL SPACE", "آپ کی ذاتی جگہ")}</span>
                       <h2>{tr(`Welcome, ${user.full_name.split(" ")[0]}`, `خوش آمدید، ${user.full_name.split(" ")[0]}`)}</h2>
-                      <p className="muted">{tr("Here's an overview of your contributions and recent activity.", "یہاں آپ کے عطیات اور حالیہ سرگرمیوں کا خلاصہ ہے۔")}</p>
+                      <p>{tr("Here's an overview of your contributions and recent activity.", "یہاں آپ کے عطیات اور حالیہ سرگرمیوں کا خلاصہ ہے۔")}</p>
                     </div>
-                    <button className="button button-primary" onClick={() => donateTo("")}>+ {tr("Make a donation", "عطیہ دیں")}</button>
-                  </div>
+                    <div className="x-welcome-actions">
+                      <button className="x-btn x-btn-gold" data-magnetic onClick={() => donateTo("")}>+ {tr("Make a donation", "عطیہ دیں")}</button>
+                      <button className="x-btn x-btn-glass" onClick={() => go("report")}>{tr("Public report", "عوامی رپورٹ")}</button>
+                      <button className="x-btn x-btn-glass" onClick={() => go("profile")}>{tr("My profile", "میری پروفائل")}</button>
+                    </div>
+                  </section>
 
-                  <div className="stats-grid four">
+                  <div className="stats-grid four x-stats">
                     <article className="stat-card"><span>{tr("Total contributed", "کل عطیہ")}</span><strong>{money(dashboard?.summary?.total_amount)}</strong><small>{tr("Confirmed donations only", "صرف تصدیق شدہ عطیات")}</small></article>
                     <article className="stat-card"><span>{tr("Donation records", "عطیات کے ریکارڈ")}</span><strong>{dashboard?.summary?.total_donations ?? 0}</strong><small>{tr("Including pending", "زیرِ التوا سمیت")}</small></article>
                     <article className="stat-card"><span>{tr("Pending", "زیرِ التوا")}</span><strong>{pendingMine}</strong><small>{tr("Awaiting confirmation", "تصدیق کے منتظر")}</small></article>
@@ -922,13 +939,13 @@ export default function App() {
                   </div>
 
                   <div className="two-col wide-left">
-                    <section className="panel">
+                    <section className="panel x-pagehead">
                       <h3>{tr("Your giving, last 6 months", "آپ کے عطیات، گزشتہ 6 ماہ")}</h3>
                       <TrendChart series={myMonthly} labels={trendLabels} />
                     </section>
-                    <section className="panel">
+                    <section className="panel x-pagehead">
                       <h3>{tr("Your member card", "آپ کا ممبر کارڈ")}</h3>
-                      <div className="member-card">
+                      <div className="member-card x-member">
                         <span className="brand-mark">NI</span>
                         <strong>{user.full_name}</strong>
                         <small>{user.email}</small>
@@ -937,8 +954,8 @@ export default function App() {
                     </section>
                   </div>
 
-                  <section className="panel">
-                    <div className="section-heading">
+                  <section className="panel x-pagehead">
+                    <div className="section-heading x-pagehead-lite">
                       <div>
                         <h3>{tr("Donation history", "عطیات کی تاریخ")}</h3>
                         <p className="muted">{tr("A record of your latest contributions.", "آپ کے حالیہ عطیات کا ریکارڈ۔")}</p>
@@ -995,7 +1012,7 @@ export default function App() {
           {/* ════════════ DONATE ════════════ */}
           {page === "donate" && (
             <div className="two-col wide-left">
-              <section className="panel">
+              <section className="panel x-pagehead">
                 <span className="eyebrow">{tr("SUPPORT THE COMMUNITY", "کمیونٹی کی مدد کریں")}</span>
                 <h2>{tr("Make a contribution", "عطیہ دیں")}</h2>
 
@@ -1090,7 +1107,7 @@ export default function App() {
                 )}
               </section>
 
-              <aside className="panel impact-side">
+              <aside className="panel impact-side x-donate-aside">
                 <h3>{tr("Why it matters", "یہ کیوں اہم ہے")}</h3>
                 <ul className="facts">
                   <li><span>{tr("Funds raised", "جمع شدہ فنڈز")}</span><strong>{money(stats?.total_raised)}</strong></li>
@@ -1110,14 +1127,14 @@ export default function App() {
           {/* ════════════ PROJECTS ════════════ */}
           {page === "projects" && (
             <>
-              <div className="section-heading">
+              <div className="section-heading x-pagehead-lite">
                 <div>
                   <span className="eyebrow">{tr("COMMUNITY DEVELOPMENT", "کمیونٹی کی ترقی")}</span>
                   <h2>{tr("Welfare projects", "فلاحی منصوبے")}</h2>
                   <p className="muted">{tr("Explore initiatives serving the people of Chitta Batta.", "چھٹہ بٹہ کے لوگوں کے لیے جاری فلاحی سرگرمیاں دیکھیں۔")}</p>
                 </div>
               </div>
-              <div className="toolbar">
+              <div className="toolbar x-toolbar">
                 <input type="search" placeholder={tr("Search projects…", "منصوبے تلاش کریں…")} value={projectSearch} onChange={(e) => setProjectSearch(e.target.value)} />
                 <div className="chips">
                   {["all", "ongoing", "planned", "completed", "cancelled"].map((s) => (
@@ -1125,7 +1142,7 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              <div className="cards-grid">
+              <div className="cards-grid x-projects-grid">
                 {publicLoading && [1, 2].map((i) => <div className="panel" key={i}><div className="skeleton-line wide" /><div className="skeleton-line" /><div className="skeleton-line" /></div>)}
                 {filteredProjects.map((p) => renderProject(p))}
                 {!publicLoading && !filteredProjects.length && (
@@ -1144,7 +1161,7 @@ export default function App() {
               <span className="eyebrow">{tr("NEWS & UPDATES", "خبریں اور اپ ڈیٹس")}</span>
               <h2>{tr("Community announcements", "کمیونٹی کے اعلانات")}</h2>
               <p className="muted">{tr("Stay informed about welfare activities and community updates.", "فلاحی سرگرمیوں اور کمیونٹی کی تازہ خبروں سے باخبر رہیں۔")}</p>
-              <div className="toolbar">
+              <div className="toolbar x-toolbar">
                 <input type="search" placeholder={tr("Search announcements…", "اعلانات تلاش کریں…")} value={announcementSearch} onChange={(e) => setAnnouncementSearch(e.target.value)} />
               </div>
               {filteredAnnouncements.map((item) => (
@@ -1174,7 +1191,7 @@ export default function App() {
           {/* ════════════ REPORT ════════════ */}
           {page === "report" && (
             <>
-              <section className="panel">
+              <section className="panel x-pagehead">
                 <span className="eyebrow">{tr("PUBLIC ACCOUNTABILITY", "عوامی جواب دہی")}</span>
                 <h2>{tr("Monthly financial report", "ماہانہ مالیاتی رپورٹ")}</h2>
                 <p className="muted">{tr("Review recorded donations and expenses for a selected month.", "منتخب مہینے کے عطیات اور اخراجات کا ریکارڈ دیکھیں۔")}</p>
@@ -1197,7 +1214,7 @@ export default function App() {
                 {report && (
                   <>
                     <h3 className="report-title">{monthLabel(report.month, true)}</h3>
-                    <div className="stats-grid four report-grid">
+                    <div className="stats-grid four report-grid x-stats">
                       <article className="stat-card opening"><span>{tr("Opening balance", "ابتدائی بیلنس")}</span><strong>{money(report.opening_balance)}</strong></article>
                       <i className="op" aria-hidden="true">+</i>
                       <article className="stat-card donations"><span>{tr("Donations received", "وصول شدہ عطیات")}</span><strong>{money(report.donations_received)}</strong><small>{report.donation_count} {report.donation_count === 1 ? tr("record", "ریکارڈ") : tr("records", "ریکارڈ")}</small></article>
@@ -1222,7 +1239,7 @@ export default function App() {
               </section>
 
               <div className="two-col">
-                <section className="panel">
+                <section className="panel x-pagehead">
                   <h3>{tr("Since the beginning", "آغاز سے اب تک")}</h3>
                   <ul className="facts">
                     <li><span>{tr("Total raised", "کل جمع")}</span><strong>{money(stats?.total_raised)}</strong></li>
@@ -1231,7 +1248,7 @@ export default function App() {
                     <li><span>{tr("Completed donations", "مکمل عطیات")}</span><strong>{stats?.donation_count ?? 0}</strong></li>
                   </ul>
                 </section>
-                <section className="panel">
+                <section className="panel x-pagehead">
                   <h3>{tr("Spending by category", "قسم کے لحاظ سے خرچ")}</h3>
                   <DonutChart data={(stats?.expense_categories || []).map((c) => ({ label: c.category, value: c.total }))} emptyText={tr("No expenses recorded yet.", "ابھی کوئی اخراجات درج نہیں۔")} />
                 </section>
@@ -1243,7 +1260,7 @@ export default function App() {
           {page === "profile" && (
             <>
               {!user ? (
-                <section className="panel">
+                <section className="panel x-pagehead">
                   <h2>{tr("Sign in to manage your profile", "پروفائل کے لیے لاگ اِن کریں")}</h2>
                   <button className="button button-primary" onClick={() => openAuth("login")}>{tr("Sign in", "لاگ اِن")}</button>
                 </section>
@@ -1252,7 +1269,7 @@ export default function App() {
                   <span className="eyebrow">{tr("ACCOUNT", "اکاؤنٹ")}</span>
                   <h2>{tr("My profile", "میری پروفائل")}</h2>
                   <div className="two-col">
-                    <section className="panel">
+                    <section className="panel x-pagehead">
                       <h3>{tr("Personal details", "ذاتی تفصیلات")}</h3>
                       <form className="form-grid single" key={user.id + user.full_name} onSubmit={saveProfile}>
                         <label>{tr("Full name", "پورا نام")}<input name="full_name" required maxLength="100" defaultValue={user.full_name} /></label>
@@ -1261,7 +1278,7 @@ export default function App() {
                         <button className="button button-primary" type="submit">{tr("Save changes", "تبدیلیاں محفوظ کریں")}</button>
                       </form>
                     </section>
-                    <section className="panel">
+                    <section className="panel x-pagehead">
                       <h3>{tr("Change password", "پاس ورڈ تبدیل کریں")}</h3>
                       <form className="form-grid single" onSubmit={changePassword}>
                         <label>{tr("Current password", "موجودہ پاس ورڈ")}<input name="current_password" type="password" required autoComplete="current-password" /></label>
@@ -1279,7 +1296,7 @@ export default function App() {
           {/* ════════════ ADMIN ════════════ */}
           {page === "admin" && (
             !isAdmin ? (
-              <section className="panel">
+              <section className="panel x-pagehead">
                 <span className="eyebrow">{tr("RESTRICTED AREA", "محدود رسائی")}</span>
                 <h2>{tr("Administrator access required", "ایڈمن کی اجازت ضروری ہے")}</h2>
                 <p className="muted">{tr("Sign in with an account that has been promoted to administrator.", "ایسے اکاؤنٹ سے لاگ اِن کریں جسے ایڈمن کی اجازت حاصل ہو۔")}</p>
@@ -1294,22 +1311,7 @@ export default function App() {
         </section>
       </main>
 
-      <footer className="footer">
-        <div className="footer-brand">
-          <span className="brand-mark" aria-hidden="true">NI</span>
-          <div>
-            <strong>{tr("Nojawan Itehad Welfare", "نوجوان اتحاد ویلفیئر")}</strong>
-            <span>{tr("Community welfare · Chitta Batta", "کمیونٹی ویلفیئر · چھٹہ بٹہ")}</span>
-            <small>{tr("Every confirmed rupee is reported openly.", "ہر تصدیق شدہ روپیہ کھلے عام رپورٹ ہوتا ہے۔")}</small>
-          </div>
-        </div>
-        <nav className="footer-links" aria-label="Footer">
-          <button onClick={() => go("projects")}>{tr("Projects", "منصوبے")}</button>
-          <button onClick={() => go("report")}>{tr("Reports", "رپورٹس")}</button>
-          <button onClick={() => go("announcements")}>{tr("News", "خبریں")}</button>
-          <button onClick={() => { go("home"); setTimeout(() => document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" }), 80); }}>{tr("Contact", "رابطہ")}</button>
-        </nav>
-      </footer>
+      <SiteFooter tr={tr} go={go} onDonate={() => donateTo("")} user={user} isAdmin={isAdmin} />
 
       {page !== "donate" && !authOpen && (
         <button type="button" className="button button-gold mobile-donate" onClick={() => donateTo("")}>♡ {tr("Donate", "عطیہ دیں")}</button>

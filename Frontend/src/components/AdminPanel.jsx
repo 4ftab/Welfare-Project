@@ -217,7 +217,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
         )}
       </p>
 
-      <div className="tabs" role="tablist">
+      <div className="tabs x-tabs" role="tablist">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -246,7 +246,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
 
       {tab === "overview" && tabReady.overview && overview && (
         <>
-          <div className="stats-grid four">
+          <div className="stats-grid four x-stats">
             <article className="stat-card"><span>{tr("Funds raised", "جمع شدہ فنڈز")}</span><strong>{money(overview.raised)}</strong><small>{tr("Completed donations", "مکمل عطیات")}</small></article>
             <article className="stat-card"><span>{tr("Expenses paid", "ادا شدہ اخراجات")}</span><strong>{money(overview.spent)}</strong><small>{tr("All recorded expenses", "تمام درج اخراجات")}</small></article>
             <article className="stat-card"><span>{tr("Available balance", "دستیاب بیلنس")}</span><strong>{money(overview.balance)}</strong><small>{tr("Raised minus spent", "جمع منفی خرچ")}</small></article>
@@ -351,7 +351,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
               </div>
               <button className="button button-light" onClick={() => exportCsv("donations")}>⬇ {tr("Export CSV", "CSV ایکسپورٹ")}</button>
             </div>
-            <div className="toolbar">
+            <div className="toolbar x-toolbar">
               <input type="search" placeholder={tr("Search donor, email, reference…", "نام، ای میل، حوالہ تلاش کریں…")} value={donationSearch} onChange={(e) => setDonationSearch(e.target.value)} />
               <div className="chips">
                 {["all", "pending", "completed", "failed", "cancelled", "expired", "refunded"].map((s) => (
@@ -430,7 +430,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
               </div>
               <button className="button button-light" onClick={() => exportCsv("expenses")}>⬇ {tr("Export CSV", "CSV ایکسپورٹ")}</button>
             </div>
-            <div className="toolbar">
+            <div className="toolbar x-toolbar">
               <input type="search" placeholder={tr("Search title, category, project…", "عنوان، قسم، منصوبہ تلاش کریں…")} value={expenseSearch} onChange={(e) => setExpenseSearch(e.target.value)} />
             </div>
             <div className="table-wrap">
@@ -552,7 +552,7 @@ export default function AdminPanel({ token, tr, projects, reloadPublic, notify, 
         <section className="panel">
           <h3>{tr("Registered members", "رجسٹرڈ اراکین")}</h3>
           <p className="muted">{tr("Deactivate accounts that should no longer sign in, or promote trusted members to administrator.", "جن اکاؤنٹس کو لاگ اِن نہیں کرنا چاہیے انہیں غیر فعال کریں یا قابلِ اعتماد رکن کو ایڈمن بنائیں۔")}</p>
-          <div className="toolbar">
+          <div className="toolbar x-toolbar">
             <input type="search" placeholder={tr("Search name, email, phone…", "نام، ای میل، فون تلاش کریں…")} value={userSearch} onChange={(e) => setUserSearch(e.target.value)} />
           </div>
           <div className="table-wrap">

@@ -1,0 +1,373 @@
+/* =========================================================
+   SYSTEM LAYER: one art direction, ten influences. Loaded last.
+   Pure CSS: no markup, state or API behaviour is touched.
+
+   Where each style is used
+   - Liquid glass / glassmorphism : top bar, floating hero cards
+   - Bento grid                   : home impact strip, user + admin stats
+   - Claymorphism                 : value cards, steps, member card
+   - Neomorphism                  : inset inputs, preset and filter chips
+   - Skeuomorphism                : tactile primary / gold buttons (raised, pressed)
+   - Brutalism                    : hard-edged step badges, section rules, eyebrow tags
+   - Minimalism                   : donate form and tables stay flat and quiet
+   - Maximalism                   : hero only (kept from the earlier layers)
+   - Spatial UI                   : layered elevation tokens, lifting cards
+   ========================================================= */
+
+:root {
+  --ink-900: #0b2a26;
+  --line: rgba(5, 47, 40, 0.1);
+  --raise-1: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 -1px 0 rgba(5, 47, 40, 0.05) inset, 0 8px 20px rgba(5, 47, 40, 0.08);
+  --raise-2: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 18px 40px rgba(5, 47, 40, 0.14);
+  --inset: inset 2px 2px 5px rgba(5, 47, 40, 0.1), inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+  --clay: 0 2px 0 rgba(255, 255, 255, 0.95) inset, 0 -6px 12px rgba(6, 122, 92, 0.06) inset, 0 14px 28px rgba(5, 47, 40, 0.1);
+}
+
+/* ── Typography: tabular figures for money ── */
+
+.stat-card > strong,
+.impact-strip strong,
+.sum-amount,
+.facts strong,
+.funding-head strong,
+td {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.eyebrow {
+  letter-spacing: 0.14em;
+}
+
+.content h2 {
+  text-wrap: balance;
+  letter-spacing: -0.015em;
+}
+
+/* ── Liquid-glass top bar ── */
+
+.topbar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(253, 251, 246, 0.6));
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  backdrop-filter: blur(16px) saturate(1.5);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 8px 28px rgba(5, 47, 40, 0.06);
+}
+
+.topbar[data-scrolled] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(253, 251, 246, 0.84));
+}
+
+.sidebar .nav-item.active {
+  box-shadow: var(--raise-1);
+}
+
+.hero-glass,
+.hero-ring-card {
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+}
+
+/* ── Tactile (skeuomorphic) buttons ── */
+
+.button-primary {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 -3px 0 rgba(0, 0, 0, 0.16) inset, 0 10px 22px rgba(6, 122, 92, 0.28);
+}
+
+.button-gold {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 -3px 0 rgba(120, 78, 0, 0.22) inset, 0 10px 22px rgba(217, 160, 47, 0.35);
+}
+
+.button-primary:active:not(:disabled),
+.button-gold:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22) inset, 0 3px 8px rgba(6, 122, 92, 0.2);
+}
+
+.button-light:active:not(:disabled) {
+  box-shadow: var(--inset);
+}
+
+.pay-btn {
+  min-height: 56px;
+  font-size: 1.05rem;
+}
+
+/* ── Neomorphic inputs and chips (text stays high-contrast) ── */
+
+:is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="range"]) {
+  background: #f6f2e9;
+  border: 1px solid rgba(5, 47, 40, 0.14);
+  box-shadow: var(--inset);
+  color: var(--ink-900);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+}
+
+:is(input, select, textarea):focus {
+  background: #fffdf8;
+  border-color: var(--emerald-500);
+  box-shadow: var(--inset), 0 0 0 4px rgba(10, 157, 122, 0.18);
+}
+
+.preset,
+.chip {
+  box-shadow: var(--raise-1);
+}
+
+.preset.active,
+.chip.active {
+  box-shadow: var(--inset), 0 0 0 2px var(--emerald-500) inset;
+}
+
+.preset {
+  min-height: 48px;
+  font-variant-numeric: tabular-nums;
+}
+
+.donate-summary {
+  border: 1px dashed rgba(5, 47, 40, 0.25);
+  background: linear-gradient(180deg, #fffdf8, #f8f2e3);
+  box-shadow: var(--raise-1);
+}
+
+/* ── Bento: home impact strip (1 feature tile + 3 supporting tiles) ── */
+
+.impact-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-flow: dense;
+  gap: 14px;
+}
+
+.impact-strip article {
+  border-radius: 24px;
+  box-shadow: var(--clay);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out);
+}
+
+.impact-strip article:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--raise-2);
+}
+
+@media (min-width: 900px) {
+  .impact-strip article:first-child {
+    grid-column: span 2;
+    grid-row: span 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: 220px;
+    color: #fff;
+    background:
+      radial-gradient(420px 220px at 100% 0%, rgba(243, 210, 122, 0.32), transparent 65%),
+      linear-gradient(150deg, var(--forest-900), var(--emerald-700));
+  }
+
+  .impact-strip article:first-child strong {
+    font-family: var(--display);
+    font-size: clamp(2.8rem, 5vw, 4.4rem);
+    line-height: 1;
+    color: var(--gold-300);
+  }
+
+  .impact-strip article:first-child > span {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 899px) {
+  .impact-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Bento: stat cards on dashboard and admin overview ── */
+
+.stats-grid.four {
+  gap: 14px;
+}
+
+.stat-card {
+  border-radius: 22px;
+  box-shadow: var(--clay);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  transition: transform 0.3s var(--ease-out), box-shadow 0.3s var(--ease-out);
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--raise-2);
+}
+
+.stats-grid.four:not(.report-grid) > .stat-card:first-child {
+  color: #fff;
+  background:
+    radial-gradient(260px 160px at 100% 0%, rgba(243, 210, 122, 0.3), transparent 65%),
+    linear-gradient(150deg, var(--forest-900), var(--emerald-700));
+}
+
+.stats-grid.four:not(.report-grid) > .stat-card:first-child span,
+.stats-grid.four:not(.report-grid) > .stat-card:first-child small {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.stats-grid.four:not(.report-grid) > .stat-card:first-child strong {
+  color: var(--gold-300);
+}
+
+@media (min-width: 1100px) {
+  .stats-grid.four:not(.report-grid) {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  }
+}
+
+/* ── Claymorphism: friendly value cards, steps, member card ── */
+
+.value,
+.steps li {
+  border-radius: 24px;
+  box-shadow: var(--clay);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+}
+
+.member-card {
+  border-radius: 26px;
+  box-shadow: var(--clay);
+}
+
+/* ── Brutalist accents: hard edges and offset shadow, used sparingly ── */
+
+.step-no {
+  border: 2px solid var(--ink-900);
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 var(--gold-400);
+}
+
+.section-heading {
+  border-bottom: 2px solid var(--ink-900);
+  padding-bottom: 14px;
+}
+
+.section-heading .eyebrow {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--gold-300);
+  color: var(--ink-900);
+  border: 2px solid var(--ink-900);
+  border-radius: 4px;
+}
+
+/* ── Spatial depth ── */
+
+.panel {
+  box-shadow: var(--raise-1);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+.project-card {
+  transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out);
+}
+
+.project-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--raise-2);
+}
+
+/* ── Tables: flat and legible ── */
+
+thead th {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+tbody tr {
+  transition: background 0.2s ease;
+}
+
+tbody tr:hover {
+  background: rgba(6, 122, 92, 0.05);
+}
+
+/* ── Phones ── */
+
+@media (max-width: 640px) {
+  .button,
+  .chip,
+  .preset,
+  .nav-item {
+    min-height: 44px;
+  }
+
+  .stats-grid.four:not(.report-grid) > .stat-card:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .impact-strip article,
+  .stat-card,
+  .project-card {
+    transition: none;
+  }
+
+  .impact-strip article:hover,
+  .stat-card:hover,
+  .project-card:hover {
+    transform: none;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .topbar {
+    background: rgba(253, 251, 246, 0.96);
+  }
+}
+
+/* ── Fixes for the dark feature tiles (override the gradient-text fill) ── */
+
+.impact-strip article:first-child > strong,
+.stats-grid.four:not(.report-grid) > .stat-card:first-child > strong {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+
+.section-heading .eyebrow::before {
+  display: none;
+}
+
+.section-heading > div {
+  padding-top: 4px;
+}
+
+/* The count-up number sits in a span; keep it the size of its tile's figure. */
+.impact-strip strong span {
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.stat-card > strong {
+  font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .stat-card > strong {
+    font-size: 1.2rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 400px) {
+  .stats-grid .stat-card > strong {
+    font-size: 1.05rem;
+    letter-spacing: -0.02em;
+  }
+
+  .stats-grid.four:not(.report-grid) {
+    grid-template-columns: 1fr;
+  }
+}

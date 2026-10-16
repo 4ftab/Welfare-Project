@@ -1,4 +1,4 @@
-import { useLanguage } from "../LanguageContext";
+import { useLanguage } from "../languageContext";
 import "./Navbar.css";
 
 function Navbar() {

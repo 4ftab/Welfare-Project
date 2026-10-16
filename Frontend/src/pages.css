@@ -1,0 +1,269 @@
+/* =========================================================
+   PAGES LAYER: projects, donate, dashboard, reports, admin. Loaded after ui.css.
+   Scoped to .x-app so it wins over the older layers without !important.
+   ========================================================= */
+
+/* ── Page header cards: brutalist rule + soft paper ── */
+.x-app .x-pagehead {
+  position: relative;
+  overflow: hidden;
+  border: 1.5px solid var(--x-ink);
+  border-radius: var(--x-radius);
+  background: linear-gradient(180deg, #fffdf7, var(--x-paper));
+  box-shadow: 6px 6px 0 var(--x-forest), var(--x-shadow);
+}
+
+.x-app .x-pagehead::before {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  content: "";
+  background: repeating-linear-gradient(90deg, var(--x-gold) 0 18px, var(--x-forest) 18px 36px);
+}
+
+.x-app .x-pagehead > h2,
+.x-app .x-pagehead-lite h2 {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: clamp(2rem, 4.4vw, 3.2rem);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  color: var(--x-forest-2);
+}
+
+.x-app .eyebrow {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1.5px solid var(--x-ink);
+  border-radius: 999px;
+  background: var(--x-gold-2);
+  color: var(--x-ink);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  transform: rotate(-1.2deg);
+}
+
+/* ── Project cards: glass-topped clay cards in a staggered bento ── */
+.x-app .x-projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 22px;
+}
+
+.x-app .x-project {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: 1.5px solid rgba(18, 32, 28, 0.85);
+  border-radius: 30px;
+  background: #fffdf7;
+  box-shadow: 0 2px 0 #fff inset, 0 24px 44px -22px rgba(7, 39, 31, 0.5);
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s;
+}
+
+.x-app .x-project:hover {
+  transform: translateY(-8px) rotate(-0.4deg);
+  box-shadow: 8px 8px 0 var(--x-gold), 0 30px 50px -24px rgba(7, 39, 31, 0.55);
+}
+
+@media (min-width: 900px) {
+  .x-app .x-project:nth-child(5n + 1) { grid-column: span 2; }
+  .x-app .x-project:nth-child(5n + 1) .project-art { min-height: 190px; }
+}
+
+.x-app .x-project .project-art {
+  position: relative;
+  background: linear-gradient(145deg, var(--x-forest), var(--x-emerald));
+}
+
+.x-app .x-project .art-glyph {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 12px 24px rgba(0, 0, 0, 0.2);
+}
+
+.x-app .x-project .project-body { padding: 20px 22px 24px; flex: 1; }
+.x-app .x-project h3 { font-family: "Fraunces", Georgia, serif; font-size: 1.35rem; letter-spacing: -0.02em; }
+
+.x-app .x-project .card-cta {
+  width: 100%;
+  margin-top: 14px;
+  border: 1.5px solid var(--x-ink);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fbe39a, var(--x-gold) 60%, #d9a02f);
+  color: var(--x-ink);
+  font-weight: 800;
+  box-shadow: 0 3px 0 #a87818, 0 10px 18px -8px rgba(168, 120, 24, 0.6);
+}
+
+.x-app .x-project .card-cta:active { transform: translateY(2px); box-shadow: 0 1px 0 #a87818; }
+
+/* ── Toolbar / chips: neomorphic ── */
+.x-app .x-toolbar {
+  padding: 12px;
+  border-radius: 24px;
+  background: var(--x-paper-2);
+  box-shadow: var(--x-inset);
+}
+
+.x-app .x-toolbar input[type="search"] {
+  border: 0;
+  border-radius: 16px;
+  background: var(--x-paper);
+  box-shadow: var(--x-inset);
+}
+
+.x-app .chip {
+  border: 0;
+  background: var(--x-paper);
+  color: var(--x-ink-2);
+  font-weight: 700;
+  box-shadow: 4px 4px 9px rgba(10, 58, 48, 0.12), -4px -4px 9px rgba(255, 255, 255, 0.95);
+}
+
+.x-app .chip.active {
+  background: var(--x-forest);
+  color: var(--x-gold-2);
+  box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Stats: bento with one hero tile ── */
+.x-app .x-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.x-app .x-stats .stat-card {
+  position: relative;
+  border: 0;
+  border-radius: 26px;
+  background: linear-gradient(160deg, #fffdf7, var(--x-paper-2));
+  box-shadow: 0 2px 0 #fff inset, 0 -8px 16px rgba(11, 138, 104, 0.07) inset, 0 16px 30px -16px rgba(10, 58, 48, 0.35);
+}
+
+.x-app .x-stats .stat-card:first-child {
+  grid-column: span 2;
+  background: radial-gradient(120% 140% at 100% 0, rgba(126, 226, 189, 0.35), transparent 55%), linear-gradient(145deg, var(--x-forest), var(--x-forest-2));
+  color: #f6f1e6;
+}
+
+.x-app .x-stats .stat-card:first-child > span,
+.x-app .x-stats .stat-card:first-child > small { color: var(--x-mint); }
+.x-app .x-stats .stat-card:first-child > strong { color: var(--x-gold-2); font-size: clamp(1.8rem, 4vw, 2.8rem); }
+
+.x-app .x-stats .stat-card > strong {
+  font-family: "Fraunces", Georgia, serif;
+  letter-spacing: -0.03em;
+}
+
+.x-app .x-stats.report-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.x-app .x-stats.report-grid .stat-card:first-child { grid-column: auto; }
+
+@media (max-width: 860px) {
+  .x-app .x-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+  .x-app .x-stats { grid-template-columns: 1fr; }
+  .x-app .x-stats .stat-card:first-child { grid-column: auto; }
+}
+
+/* ── Member card: skeuomorphic gold-edged card ── */
+.x-app .x-member {
+  position: relative;
+  padding: 22px;
+  border: 1px solid rgba(246, 217, 138, 0.6);
+  border-radius: 22px;
+  background: linear-gradient(135deg, var(--x-forest) 0%, #0e5545 55%, var(--x-forest-2) 100%);
+  color: #f6f1e6;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 22px 36px -18px rgba(7, 39, 31, 0.7);
+}
+
+.x-app .x-member small { color: var(--x-mint); }
+
+/* ── Donate: glass impact aside, inset inputs ── */
+.x-app .x-donate-aside {
+  position: sticky;
+  top: 104px;
+  align-self: start;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 30px;
+  background: radial-gradient(120% 90% at 0 0, rgba(126, 226, 189, 0.28), transparent 60%), linear-gradient(160deg, var(--x-forest), var(--x-forest-2));
+  color: #eaf5ef;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3) inset, 0 30px 50px -24px rgba(7, 39, 31, 0.8);
+}
+
+.x-app .x-donate-aside h3,
+.x-app .x-donate-aside strong { color: var(--x-gold-2); }
+.x-app .x-donate-aside .muted,
+.x-app .x-donate-aside li span { color: #cfe6dc; }
+
+.x-app input:not([type="checkbox"]):not([type="radio"]),
+.x-app select,
+.x-app textarea {
+  border: 0;
+  border-radius: 14px;
+  background: var(--x-paper);
+  box-shadow: var(--x-inset);
+}
+
+.x-app input:focus-visible,
+.x-app select:focus-visible,
+.x-app textarea:focus-visible {
+  outline: 2px solid var(--x-emerald);
+  outline-offset: 2px;
+}
+
+/* ── Tables (reports, history, admin): minimalist ── */
+.x-app .table-wrap {
+  border: 1.5px solid var(--x-ink);
+  border-radius: 20px;
+  background: #fffdf7;
+}
+
+.x-app table th {
+  background: var(--x-forest);
+  color: var(--x-gold-2);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.x-app table tbody tr:hover { background: rgba(126, 226, 189, 0.16); }
+
+/* ── Admin: tabs as a floating glass dock ── */
+.x-app .x-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(170%);
+  box-shadow: 0 1px 0 #fff inset, 0 18px 34px -18px rgba(10, 58, 48, 0.4);
+}
+
+.x-app .x-tabs .tab {
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.x-app .x-tabs .tab.active,
+.x-app .x-tabs .tab[aria-selected="true"] {
+  background: var(--x-forest);
+  color: var(--x-gold-2);
+  box-shadow: 0 3px 0 var(--x-forest-2);
+}
+
+@media (max-width: 860px) {
+  .x-app .x-donate-aside { position: static; }
+  .x-app .x-tabs { border-radius: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .x-app .x-project,
+  .x-app .x-project:hover { transition: none; transform: none; }
+}

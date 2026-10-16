@@ -9,6 +9,10 @@ const REVEAL = [
   ".content .announcement",
   ".content .project-card",
   ".impact-strip article",
+  ".x-tile",
+  ".x-step",
+  ".x-news-item",
+  ".x-ledger",
   ".value",
   ".steps li",
   ".ticker",
@@ -33,7 +37,7 @@ export function useAmbient() {
       ticking = false;
       const max = document.documentElement.scrollHeight - window.innerHeight;
       if (bar) bar.style.transform = `scaleX(${max > 0 ? window.scrollY / max : 0})`;
-      document.querySelector(".topbar")?.toggleAttribute("data-scrolled", window.scrollY > 24);
+      document.querySelector(".x-nav")?.toggleAttribute("data-scrolled", window.scrollY > 24);
     };
 
     const onScroll = () => {
@@ -70,7 +74,7 @@ export function useAmbient() {
 
       if (!fine || prefersReducedMotion()) return;
 
-      const hero = document.querySelector(".hero-x");
+      const hero = document.querySelector(".x-hero");
       if (hero) {
         const rect = hero.getBoundingClientRect();
         const inside = y > rect.top && y < rect.bottom;
