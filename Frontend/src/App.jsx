@@ -684,7 +684,7 @@ export default function App() {
 
       <main className="main-layout" id="main-content">
 
-        <section className="content" key={page}>
+        <section className="content" key={page} data-page={page}>
           {/* ════════════ HOME ════════════ */}
           {page === "home" && (
             <>

@@ -11,6 +11,7 @@ import "./design.css";
 import "./system.css";
 import "./ui.css";
 import "./pages.css";
+import "./motion.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

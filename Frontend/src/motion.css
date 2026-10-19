@@ -1,0 +1,546 @@
+/* =========================================================
+   MOTION LAYER — animated gradients, reveals and interaction polish. Loaded last.
+
+   1. Tokens          colour ramps, easing, durations (one place to tune everything)
+   2. Keyframes + body wash
+   3. Page character  one transition + one accent per route, keyed off .content[data-page]
+   4. Hero            drifting ambient lighting + parallax (home only)
+   5. Reveals         direction + stagger for the [data-rv] observer in useAmbient.js
+   6. Cards / buttons / forms / nav / footer / modal
+   7. Reduced motion and low-power fallbacks
+
+   Rules: animate transform + opacity only (background-position on small
+   surfaces is the single exception); large blurred layers are static or
+   transform-driven; nothing animates forever except two hero orbs, the CTA
+   band sheen and the gold button sheen.
+   ========================================================= */
+
+/* ───────────────────────── 1. Tokens ───────────────────────── */
+
+:root {
+  --m-forest: #052f28;
+  --m-forest-2: #0a3a30;
+  --m-emerald: #0b8a68;
+  --m-emerald-2: #12b58a;
+  --m-turquoise: #16bfb4;
+  --m-teal: #0e8a8c;
+  --m-lime: #b9e769;
+  --m-mint: #7ee2bd;
+  --m-ivory: #fbf7ec;
+  --m-gold: #e9b84a;
+  --m-gold-2: #f6d98a;
+
+  --m-aurora: linear-gradient(115deg, var(--m-forest) 0%, var(--m-teal) 38%, var(--m-emerald-2) 68%, var(--m-lime) 130%);
+  --m-flow: linear-gradient(100deg, var(--m-emerald) 0%, var(--m-turquoise) 33%, var(--m-lime) 55%, var(--m-turquoise) 78%, var(--m-emerald) 100%);
+  --m-gold-flow: linear-gradient(100deg, #d9a02f 0%, var(--m-gold-2) 40%, var(--m-gold) 60%, #d9a02f 100%);
+
+  --m-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --m-ease-soft: cubic-bezier(0.33, 1, 0.68, 1);
+  --m-fast: 0.22s;
+  --m-med: 0.55s;
+  --m-slow: 0.9s;
+  --m-drift: 26s;
+  --m-page-accent: var(--m-emerald-2);
+}
+
+/* ───────────────────────── 2. Keyframes + body wash ───────────────────────── */
+
+@keyframes m-flow { to { background-position: 200% 50%; } }
+@keyframes m-spin { to { transform: rotate(360deg); } }
+@keyframes m-orb-a { 50% { transform: translate3d(8%, 10%, 0) scale(1.12); } }
+@keyframes m-orb-b { 50% { transform: translate3d(-10%, -8%, 0) scale(0.92); } }
+@keyframes m-sheen { 0%, 62% { transform: translateX(-130%) skewX(-20deg); } 100% { transform: translateX(260%) skewX(-20deg); } }
+@keyframes m-page-in {
+  from { opacity: 0; transform: translate3d(0, 22px, 0); filter: blur(7px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes m-rise { from { opacity: 0; transform: translate3d(0, 16px, 0); } to { opacity: 1; transform: none; } }
+@keyframes m-sheet-in { from { opacity: 0; transform: translate3d(0, -10px, 0) scale(0.98); } to { opacity: 1; transform: none; } }
+
+/* Body: a calmer, greener ambient wash that never competes with content. */
+body {
+  background:
+    radial-gradient(900px 600px at 88% -8%, rgba(233, 184, 74, 0.22), transparent 62%),
+    radial-gradient(1100px 760px at -8% 4%, rgba(22, 191, 180, 0.2), transparent 60%),
+    radial-gradient(900px 700px at 50% 110%, rgba(11, 138, 104, 0.14), transparent 65%),
+    var(--x-paper, #f6f1e6);
+  background-attachment: fixed;
+}
+
+/* ───────────────────────── 3. Page character ───────────────────────── */
+
+/* One consistent transition for every route (the section is re-keyed per page). */
+.content {
+  animation: m-page-in var(--m-slow) var(--m-ease) both;
+}
+
+.content[data-page="home"] { --m-page-accent: var(--m-turquoise); }
+.content[data-page="projects"] { --m-page-accent: var(--m-emerald-2); }
+.content[data-page="announcements"] { --m-page-accent: var(--m-gold); }
+.content[data-page="donate"] { --m-page-accent: var(--m-gold); }
+.content[data-page="report"] { --m-page-accent: var(--m-teal); }
+.content[data-page="dashboard"],
+.content[data-page="profile"] { --m-page-accent: var(--m-emerald); }
+.content[data-page="admin"] { --m-page-accent: var(--m-forest-2); }
+
+/* Header cards: the hazard stripe becomes a slowly flowing page-coloured ribbon. */
+.x-app .x-pagehead::before {
+  height: 6px;
+  background: linear-gradient(90deg, var(--m-forest) 0%, var(--m-page-accent) 35%, var(--m-gold) 65%, var(--m-forest) 100%);
+  background-size: 200% 100%;
+  animation: m-flow 12s linear infinite;
+}
+
+.x-app .x-pagehead::after {
+  position: absolute;
+  top: -40%;
+  right: -10%;
+  width: 55%;
+  aspect-ratio: 1;
+  content: "";
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--m-page-accent) 13%, transparent), transparent);
+  pointer-events: none;
+}
+
+.x-app .x-pagehead > * { position: relative; z-index: 1; }
+
+/* Projects: image-led — the art zooms and a gradient wash rises on hover. */
+.content[data-page="projects"] .project-card { overflow: hidden; }
+.content[data-page="projects"] .project-art { transition: transform 0.9s var(--m-ease); }
+.content[data-page="projects"] .project-card:hover .project-art { transform: scale(1.06); }
+
+/* News: editorial rail that draws itself on the left of each item. */
+.x-news-item { position: relative; }
+.x-news-item::before {
+  position: absolute;
+  inset: 12% auto 12% -2px;
+  width: 4px;
+  border-radius: 4px;
+  content: "";
+  background: linear-gradient(180deg, var(--m-turquoise), var(--m-gold));
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform var(--m-med) var(--m-ease);
+}
+.x-news-item:hover::before { transform: scaleY(1); }
+
+/* Donation: the primary action gets the strongest emphasis on the page. */
+.content[data-page="donate"] .button-primary {
+  box-shadow: 0 12px 26px -14px rgba(11, 138, 104, 0.8);
+}
+
+/* Dashboard / profile / admin: restrained — calmer card motion, no tilt. */
+.content[data-page="dashboard"] .stat-card:hover,
+.content[data-page="admin"] .stat-card:hover,
+.content[data-page="profile"] .panel:hover { transform: translate3d(0, -3px, 0); }
+
+.x-welcome {
+  background:
+    radial-gradient(480px 280px at 100% 0%, rgba(233, 184, 74, 0.42), transparent 65%),
+    radial-gradient(460px 320px at 0% 120%, rgba(22, 191, 180, 0.32), transparent 65%),
+    linear-gradient(150deg, var(--m-forest), var(--m-forest-2) 55%, #0b5a4c);
+}
+
+/* ───────────────────────── 4. Hero (home) ───────────────────────── */
+
+/* The orbs bleed past the hero; clip (not hidden) so the sticky nav still works. */
+.x-app { overflow-x: clip; }
+
+.x-hero {
+  isolation: isolate;
+  --sy: 0;
+  --px: 0;
+  --py: 0;
+}
+
+/* Two blurred orbs: small elements (blurred once, moved with transform only). */
+.x-hero::before,
+.x-hero::after {
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+  will-change: transform;
+}
+
+.x-hero::before {
+  top: -14%;
+  left: -12%;
+  width: min(46vw, 560px);
+  aspect-ratio: 1;
+  background: radial-gradient(closest-side, rgba(22, 191, 180, 0.42), rgba(11, 138, 104, 0.12) 60%, transparent);
+  filter: blur(36px);
+  animation: m-orb-a var(--m-drift) ease-in-out infinite;
+}
+
+.x-hero::after {
+  right: -10%;
+  bottom: -18%;
+  width: min(40vw, 480px);
+  aspect-ratio: 1;
+  background: radial-gradient(closest-side, rgba(233, 184, 74, 0.38), rgba(185, 231, 105, 0.14) 60%, transparent);
+  filter: blur(40px);
+  animation: m-orb-b calc(var(--m-drift) * 1.2) ease-in-out infinite;
+}
+
+/* The accent line flows teal -> lime -> emerald. */
+.x-h1 .x-h1-accent .w > span {
+  background: var(--m-flow);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  /* Keep the word entrance from design.css and run the colour flow alongside it. */
+  animation-name: wordUp, m-flow;
+  animation-duration: 0.95s, 9s;
+  animation-timing-function: var(--ease-out), linear;
+  animation-iteration-count: 1, infinite;
+  animation-fill-mode: both, none;
+}
+
+body.urdu-mode .x-h1 .x-h1-accent .w > span { animation-name: wordFade, m-flow; }
+
+/* Parallax: the stage drifts slower than the page; floating cards drift opposite the pointer. */
+.x-stage {
+  transform: translate3d(calc(var(--px) * -10px), calc(var(--sy) * 0.06px + var(--py) * -8px), 0);
+  transition: transform 0.6s var(--m-ease-soft);
+}
+
+.x-arch { overflow: hidden; }
+.x-arch .village { transform: scale(1.04) translate3d(calc(var(--px) * 8px), calc(var(--py) * 6px), 0); transition: transform 0.8s var(--m-ease-soft); }
+
+/* Hero copy rises as the page scrolls away from it. */
+.x-hero-copy { transform: translate3d(0, calc(var(--sy) * -0.04px), 0); }
+
+/* ───────────────────────── 5. Reveals ───────────────────────── */
+
+[data-rv="out"] {
+  opacity: 0;
+  filter: blur(4px);
+  transform: translate3d(0, 28px, 0);
+}
+
+[data-rv="out"][data-rv-dir="left"] { transform: translate3d(-34px, 0, 0); }
+[data-rv="out"][data-rv-dir="right"] { transform: translate3d(34px, 0, 0); }
+[data-rv="out"][data-rv-dir="scale"] { transform: translate3d(0, 22px, 0) scale(0.96); }
+[dir="rtl"] [data-rv="out"][data-rv-dir="left"],
+body.urdu-mode [data-rv="out"][data-rv-dir="left"] { transform: translate3d(34px, 0, 0); }
+[dir="rtl"] [data-rv="out"][data-rv-dir="right"],
+body.urdu-mode [data-rv="out"][data-rv-dir="right"] { transform: translate3d(-34px, 0, 0); }
+
+[data-rv] {
+  transition:
+    opacity var(--m-med) var(--m-ease) calc(var(--rv-i, 0) * 70ms),
+    transform var(--m-slow) var(--m-ease) calc(var(--rv-i, 0) * 70ms),
+    filter var(--m-med) var(--m-ease) calc(var(--rv-i, 0) * 70ms);
+}
+
+[data-rv="in"] { opacity: 1; filter: none; transform: none; }
+
+/* Section headings grow an underline as they enter. */
+.x-section-head h2,
+.section-heading h2 { position: relative; }
+.x-section-head h2::after,
+.section-heading h2::after {
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin-top: 10px;
+  border-radius: 3px;
+  content: "";
+  background: var(--m-flow);
+  background-size: 200% 100%;
+  transform-origin: left center;
+  animation: m-flow 10s linear infinite;
+}
+body.urdu-mode .x-section-head h2::after,
+body.urdu-mode .section-heading h2::after { transform-origin: right center; margin-inline-start: 0; }
+
+/* ───────────────────────── 6. Components ───────────────────────── */
+
+/* Cards: lift, gradient border, soft colour shift. Border is a mask layer so layout never moves. */
+.panel,
+.stat-card,
+.x-tile,
+.announcement,
+.project-card {
+  transition: transform var(--m-med) var(--m-ease), box-shadow var(--m-med) var(--m-ease), background-color var(--m-med) ease;
+}
+
+.x-tile,
+.stat-card,
+.project-card,
+.announcement { position: relative; }
+
+.x-tile::after,
+.announcement::after,
+.stat-card::before,
+.project-card::before {
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  content: "";
+  background: var(--m-flow);
+  background-size: 200% 100%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--m-med) var(--m-ease);
+}
+
+.x-tile:hover::after,
+.stat-card:hover::before,
+.project-card:hover::before,
+.announcement:hover::after {
+  opacity: 1;
+  animation: m-flow 4s linear infinite;
+}
+
+.stat-card:hover,
+.announcement:hover,
+.project-card:hover { transform: translate3d(0, -6px, 0); }
+
+/* Varied treatments: odd tiles tilt, even tiles rise. */
+.x-tile:nth-child(odd):hover { transform: translate3d(0, -6px, 0) rotate(-0.6deg); }
+.x-tile:nth-child(even):hover { transform: translate3d(0, -8px, 0) rotate(0.4deg); }
+
+.project-card .button,
+.x-tile .x-foot { transition: transform var(--m-fast) var(--m-ease); }
+.project-card:hover .button { transform: translate3d(3px, 0, 0); }
+body.urdu-mode .project-card:hover .button { transform: translate3d(-3px, 0, 0); }
+
+/* Buttons: gradient fills, lift, press, restrained glow, visible focus. */
+.button-primary,
+.x-btn-ink {
+  transition: transform var(--m-fast) var(--m-ease), box-shadow var(--m-med) var(--m-ease), background-position var(--m-slow) var(--m-ease), filter var(--m-fast) ease;
+}
+
+.button-primary {
+  background: linear-gradient(110deg, var(--m-forest-2), var(--m-emerald) 45%, var(--m-turquoise) 100%);
+  background-size: 180% 100%;
+  background-position: 0 0;
+}
+
+.button-primary:hover:not(:disabled) {
+  background-position: 100% 0;
+  transform: translate3d(0, -2px, 0);
+  box-shadow: 0 14px 28px -12px rgba(11, 138, 104, 0.75), 0 0 0 4px rgba(22, 191, 180, 0.14);
+}
+
+.button-primary:active:not(:disabled),
+.x-btn:active,
+.x-donate:active { transform: translate3d(0, 1px, 0) scale(0.98); }
+
+.button:disabled,
+.x-btn:disabled { opacity: 0.55; filter: saturate(0.7); cursor: not-allowed; }
+
+/* Gold CTAs: slow metallic sweep + glow. Only the important ones carry it. */
+.x-donate,
+.x-btn-gold {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.x-donate::after,
+.x-btn-gold::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  width: 40%;
+  content: "";
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-130%) skewX(-20deg);
+  animation: m-sheen 6s var(--m-ease-soft) infinite;
+  pointer-events: none;
+}
+
+.x-donate:hover,
+.x-btn-gold:hover { box-shadow: 0 0 0 4px rgba(233, 184, 74, 0.2), 0 14px 26px -10px rgba(217, 160, 47, 0.8); }
+
+/* Arrow buttons: the → glyph nudges. */
+.x-btn-ink,
+.x-btn-glass { transition: transform var(--m-fast) var(--m-ease), box-shadow var(--m-fast) ease, background var(--m-fast) ease; }
+
+:is(.button, .x-btn, .x-donate, .x-chip, .x-link, .x-sheet-link, .text-button):focus-visible {
+  outline: 3px solid var(--m-turquoise);
+  outline-offset: 3px;
+}
+
+/* CTA band: gradient field with a drifting sheen. */
+.x-cta-band {
+  background:
+    radial-gradient(500px 300px at 90% 0%, rgba(233, 184, 74, 0.5), transparent 65%),
+    radial-gradient(520px 340px at 0% 100%, rgba(22, 191, 180, 0.35), transparent 65%),
+    linear-gradient(150deg, var(--m-forest-2), #0a5a48 55%, var(--m-teal));
+  background-size: 100% 100%, 100% 100%, 160% 160%;
+}
+
+.x-cta-band::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  content: "";
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.09), transparent);
+  transform: translateX(-130%) skewX(-20deg);
+  animation: m-sheen 10s var(--m-ease-soft) infinite;
+  pointer-events: none;
+}
+
+.x-cta-band > * { position: relative; }
+
+/* Form fields: lit focus ring that fades in, smooth label/validation transitions. */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  transition: border-color var(--m-fast) ease, box-shadow var(--m-med) var(--m-ease), background-color var(--m-fast) ease, transform var(--m-fast) var(--m-ease);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--m-emerald-2);
+  box-shadow: 0 0 0 4px rgba(22, 191, 180, 0.18), 0 10px 24px -14px rgba(11, 138, 104, 0.6);
+  outline: none;
+}
+
+.notice,
+.error { animation: m-rise var(--m-med) var(--m-ease) both; }
+
+/* Navigation: underline grows from the centre; active pill gets an aurora fill. */
+.x-link::after {
+  position: absolute;
+  inset: auto 16px 5px;
+  height: 2px;
+  border-radius: 2px;
+  content: "";
+  background: var(--m-flow);
+  transform: scaleX(0);
+  transition: transform var(--m-med) var(--m-ease);
+}
+
+.x-link:hover::after { transform: scaleX(1); }
+.x-link.is-active::after { transform: scaleX(0); }
+
+.x-link.is-active {
+  /* Symmetric stops so the tiled flow never shows a seam. */
+  background: linear-gradient(90deg, var(--m-forest), #0e5545 25%, var(--m-teal) 50%, #0e5545 75%, var(--m-forest));
+  background-size: 200% 100%;
+  animation: m-flow 14s linear infinite;
+}
+
+.x-nav-bar { transition: background-color var(--m-med) ease, box-shadow var(--m-med) var(--m-ease), transform var(--m-med) var(--m-ease), padding var(--m-med) var(--m-ease); }
+.x-brand-mark { transition: transform var(--m-med) var(--m-ease), box-shadow var(--m-med) ease; }
+.x-brand:hover .x-brand-mark { transform: rotate(-8deg) scale(1.08); }
+
+.x-burger span { transition: transform var(--m-med) var(--m-ease), opacity var(--m-fast) ease; }
+.x-sheet:not([hidden]) { animation: m-sheet-in var(--m-med) var(--m-ease) both; }
+.x-sheet-link { transition: transform var(--m-fast) var(--m-ease), background-color var(--m-fast) ease; }
+.x-sheet-link:hover { transform: translate3d(4px, 0, 0); }
+body.urdu-mode .x-sheet-link:hover { transform: translate3d(-4px, 0, 0); }
+
+/* Footer: living gradient, gold rule, links that slide. */
+.x-footer {
+  background:
+    radial-gradient(600px 300px at 100% 0%, rgba(233, 184, 74, 0.24), transparent 65%),
+    radial-gradient(700px 360px at 0% 100%, rgba(22, 191, 180, 0.2), transparent 65%),
+    linear-gradient(180deg, #0a3a30, var(--m-forest) 70%);
+}
+
+.x-footer::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  content: "";
+  background: linear-gradient(90deg, transparent, var(--m-turquoise), var(--m-gold), var(--m-lime), transparent);
+  background-size: 200% 100%;
+  animation: m-flow 14s linear infinite;
+}
+
+.x-footer-cols button,
+.x-footer-cols span { transition: transform var(--m-fast) var(--m-ease), color var(--m-fast) ease; }
+.x-footer-cols button:hover { transform: translate3d(5px, 0, 0); }
+body.urdu-mode .x-footer-cols button:hover { transform: translate3d(-5px, 0, 0); }
+
+.x-footer-word {
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.04), rgba(126, 226, 189, 0.16), rgba(255, 255, 255, 0.04));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: m-flow 18s linear infinite;
+}
+
+/* Dialogs and overlays: glass blur-in with a spring-free ease. */
+.auth-modal-overlay {
+  background:
+    radial-gradient(700px 500px at 20% 10%, rgba(22, 191, 180, 0.25), transparent 60%),
+    radial-gradient(600px 500px at 90% 90%, rgba(233, 184, 74, 0.18), transparent 60%),
+    rgba(5, 47, 40, 0.62);
+}
+
+.auth-modal {
+  animation: m-page-in var(--m-med) var(--m-ease) both;
+}
+
+.auth-modal::before {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: block;
+  height: 5px;
+  margin: -1px -1px 0;
+  content: "";
+  background: linear-gradient(90deg, var(--m-forest), var(--m-turquoise), var(--m-gold), var(--m-forest));
+  background-size: 200% 100%;
+  animation: m-flow 10s linear infinite;
+}
+
+.auth-modal-form > * { animation: m-rise var(--m-med) var(--m-ease) both; }
+.auth-modal-form > *:nth-child(2) { animation-delay: 60ms; }
+.auth-modal-form > *:nth-child(3) { animation-delay: 120ms; }
+.auth-modal-form > *:nth-child(4) { animation-delay: 180ms; }
+.auth-modal-form > *:nth-child(5) { animation-delay: 240ms; }
+
+.redirect-overlay { background: radial-gradient(700px 500px at 50% 30%, rgba(22, 191, 180, 0.3), transparent 65%), rgba(5, 47, 40, 0.86); }
+
+/* Progress bar at the top of the page picks up the brand ramp. */
+#scroll-progress { background: linear-gradient(90deg, var(--m-emerald), var(--m-turquoise), var(--m-gold)); }
+
+/* ───────────────────────── 7. Reduced motion and low power ───────────────────────── */
+
+/* Touch / small screens: keep the colour, drop the blur-heavy and perpetual layers. */
+@media (max-width: 760px), (hover: none) {
+  .x-hero::before,
+  .x-hero::after { animation: none; filter: none; opacity: 0.8; }
+  .x-stage,
+  .x-hero-copy { transform: none; }
+  .x-donate::after,
+  .x-btn-gold::after,
+  .x-cta-band::before { animation: none; display: none; }
+  [data-rv="out"] { filter: none; }
+  .x-tile:nth-child(odd):hover,
+  .x-tile:nth-child(even):hover { transform: translate3d(0, -4px, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+
+  [data-rv="out"] { opacity: 1; filter: none; transform: none; }
+  .x-stage,
+  .x-hero-copy,
+  .x-arch .village { transform: none; }
+}

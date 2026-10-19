@@ -13,10 +13,18 @@ const REVEAL = [
   ".x-step",
   ".x-news-item",
   ".x-ledger",
+  ".x-cta-band",
+  ".x-welcome",
+  ".x-footer-cols > div",
   ".value",
   ".steps li",
   ".ticker",
 ].join(",");
+
+// Directional variants for reveals; everything else fades up. Index within siblings drives the stagger.
+const REVEAL_LEFT = ".x-welcome-copy, .x-section-head, .x-pagehead-lite, .x-news-item:nth-child(odd)";
+const REVEAL_RIGHT = ".x-news-item:nth-child(even), .x-welcome-actions";
+const REVEAL_SCALE = ".x-cta-band, .x-tile, .project-card, .stat-card";
 
 const canHover = () => window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
 const prefersReducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -38,6 +46,10 @@ export function useAmbient() {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       if (bar) bar.style.transform = `scaleX(${max > 0 ? window.scrollY / max : 0})`;
       document.querySelector(".x-nav")?.toggleAttribute("data-scrolled", window.scrollY > 24);
+      // Hero parallax value, only updated while the hero can still be on screen.
+      if (window.scrollY < window.innerHeight * 1.2 && !prefersReducedMotion()) {
+        document.querySelector(".x-hero")?.style.setProperty("--sy", String(Math.round(window.scrollY)));
+      }
     };
 
     const onScroll = () => {
@@ -137,6 +149,9 @@ export function useAmbient() {
       for (const el of found) {
         if (seen.has(el) || el.closest(".hero-x, .auth-modal, .toast-stack")) continue;
         seen.add(el);
+        el.dataset.rvDir = el.matches(REVEAL_LEFT) ? "left" : el.matches(REVEAL_RIGHT) ? "right" : el.matches(REVEAL_SCALE) ? "scale" : "up";
+        const index = el.parentElement ? Array.prototype.indexOf.call(el.parentElement.children, el) : 0;
+        el.style.setProperty("--rv-i", String(Math.min(index, 6)));
         // Anything already on (or just below) the first screen is shown immediately, never hidden first.
         if (el.getBoundingClientRect().top < lowerEdge) continue;
         el.dataset.rv = "out";
