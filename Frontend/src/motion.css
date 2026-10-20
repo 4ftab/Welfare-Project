@@ -11,8 +11,8 @@
 
    Rules: animate transform + opacity only (background-position on small
    surfaces is the single exception); large blurred layers are static or
-   transform-driven; nothing animates forever except two hero orbs, the CTA
-   band sheen and the gold button sheen.
+   transform-driven; nothing animates forever except two hero orbs and the CTA band sheen,
+   and those pause while off screen or on low-power devices.
    ========================================================= */
 
 /* ───────────────────────── 1. Tokens ───────────────────────── */
@@ -51,8 +51,8 @@
 @keyframes m-orb-b { 50% { transform: translate3d(-10%, -8%, 0) scale(0.92); } }
 @keyframes m-sheen { 0%, 62% { transform: translateX(-130%) skewX(-20deg); } 100% { transform: translateX(260%) skewX(-20deg); } }
 @keyframes m-page-in {
-  from { opacity: 0; transform: translate3d(0, 22px, 0); filter: blur(7px); }
-  to { opacity: 1; transform: none; filter: blur(0); }
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes m-rise { from { opacity: 0; transform: translate3d(0, 16px, 0); } to { opacity: 1; transform: none; } }
 @keyframes m-sheet-in { from { opacity: 0; transform: translate3d(0, -10px, 0) scale(0.98); } to { opacity: 1; transform: none; } }
@@ -64,14 +64,13 @@ body {
     radial-gradient(1100px 760px at -8% 4%, rgba(22, 191, 180, 0.2), transparent 60%),
     radial-gradient(900px 700px at 50% 110%, rgba(11, 138, 104, 0.14), transparent 65%),
     var(--x-paper, #f6f1e6);
-  background-attachment: fixed;
 }
 
 /* ───────────────────────── 3. Page character ───────────────────────── */
 
 /* One consistent transition for every route (the section is re-keyed per page). */
 .content {
-  animation: m-page-in var(--m-slow) var(--m-ease) both;
+  animation: m-page-in 0.28s var(--m-ease) both;
 }
 
 .content[data-page="home"] { --m-page-accent: var(--m-turquoise); }
@@ -88,7 +87,6 @@ body {
   height: 6px;
   background: linear-gradient(90deg, var(--m-forest) 0%, var(--m-page-accent) 35%, var(--m-gold) 65%, var(--m-forest) 100%);
   background-size: 200% 100%;
-  animation: m-flow 12s linear infinite;
 }
 
 .x-app .x-pagehead::after {
@@ -148,7 +146,6 @@ body {
 
 .x-hero {
   isolation: isolate;
-  --sy: 0;
   --px: 0;
   --py: 0;
 }
@@ -170,7 +167,6 @@ body {
   width: min(46vw, 560px);
   aspect-ratio: 1;
   background: radial-gradient(closest-side, rgba(22, 191, 180, 0.42), rgba(11, 138, 104, 0.12) 60%, transparent);
-  filter: blur(36px);
   animation: m-orb-a var(--m-drift) ease-in-out infinite;
 }
 
@@ -180,7 +176,6 @@ body {
   width: min(40vw, 480px);
   aspect-ratio: 1;
   background: radial-gradient(closest-side, rgba(233, 184, 74, 0.38), rgba(185, 231, 105, 0.14) 60%, transparent);
-  filter: blur(40px);
   animation: m-orb-b calc(var(--m-drift) * 1.2) ease-in-out infinite;
 }
 
@@ -193,33 +188,24 @@ body {
   color: transparent;
   -webkit-text-fill-color: transparent;
   /* Keep the word entrance from design.css and run the colour flow alongside it. */
-  animation-name: wordUp, m-flow;
-  animation-duration: 0.95s, 9s;
-  animation-timing-function: var(--ease-out), linear;
-  animation-iteration-count: 1, infinite;
-  animation-fill-mode: both, none;
+  background-position: 30% 50%;
 }
-
-body.urdu-mode .x-h1 .x-h1-accent .w > span { animation-name: wordFade, m-flow; }
 
 /* Parallax: the stage drifts slower than the page; floating cards drift opposite the pointer. */
 .x-stage {
-  transform: translate3d(calc(var(--px) * -10px), calc(var(--sy) * 0.06px + var(--py) * -8px), 0);
+  transform: translate3d(calc(var(--px) * -10px), calc(var(--py) * -8px), 0);
   transition: transform 0.6s var(--m-ease-soft);
 }
 
 .x-arch { overflow: hidden; }
 .x-arch .village { transform: scale(1.04) translate3d(calc(var(--px) * 8px), calc(var(--py) * 6px), 0); transition: transform 0.8s var(--m-ease-soft); }
 
-/* Hero copy rises as the page scrolls away from it. */
-.x-hero-copy { transform: translate3d(0, calc(var(--sy) * -0.04px), 0); }
 
 /* ───────────────────────── 5. Reveals ───────────────────────── */
 
 [data-rv="out"] {
   opacity: 0;
-  filter: blur(4px);
-  transform: translate3d(0, 28px, 0);
+  transform: translate3d(0, 24px, 0);
 }
 
 [data-rv="out"][data-rv-dir="left"] { transform: translate3d(-34px, 0, 0); }
@@ -232,12 +218,11 @@ body.urdu-mode [data-rv="out"][data-rv-dir="right"] { transform: translate3d(-34
 
 [data-rv] {
   transition:
-    opacity var(--m-med) var(--m-ease) calc(var(--rv-i, 0) * 70ms),
-    transform var(--m-slow) var(--m-ease) calc(var(--rv-i, 0) * 70ms),
-    filter var(--m-med) var(--m-ease) calc(var(--rv-i, 0) * 70ms);
+    opacity 0.45s var(--m-ease) calc(var(--rv-i, 0) * 50ms),
+    transform 0.6s var(--m-ease) calc(var(--rv-i, 0) * 50ms);
 }
 
-[data-rv="in"] { opacity: 1; filter: none; transform: none; }
+[data-rv="in"] { opacity: 1; transform: none; }
 
 /* Section headings grow an underline as they enter. */
 .x-section-head h2,
@@ -253,7 +238,6 @@ body.urdu-mode [data-rv="out"][data-rv-dir="right"] { transform: translate3d(-34
   background: var(--m-flow);
   background-size: 200% 100%;
   transform-origin: left center;
-  animation: m-flow 10s linear infinite;
 }
 body.urdu-mode .x-section-head h2::after,
 body.urdu-mode .section-heading h2::after { transform-origin: right center; margin-inline-start: 0; }
@@ -298,7 +282,6 @@ body.urdu-mode .section-heading h2::after { transform-origin: right center; marg
 .project-card:hover::before,
 .announcement:hover::after {
   opacity: 1;
-  animation: m-flow 4s linear infinite;
 }
 
 .stat-card:hover,
@@ -339,7 +322,7 @@ body.urdu-mode .project-card:hover .button { transform: translate3d(-3px, 0, 0);
 .button:disabled,
 .x-btn:disabled { opacity: 0.55; filter: saturate(0.7); cursor: not-allowed; }
 
-/* Gold CTAs: slow metallic sweep + glow. Only the important ones carry it. */
+/* Gold CTAs: metallic sweep on hover + glow. Only the important ones carry it. */
 .x-donate,
 .x-btn-gold {
   position: relative;
@@ -356,9 +339,14 @@ body.urdu-mode .project-card:hover .button { transform: translate3d(-3px, 0, 0);
   content: "";
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
   transform: translateX(-130%) skewX(-20deg);
-  animation: m-sheen 6s var(--m-ease-soft) infinite;
   pointer-events: none;
 }
+
+/* The metallic sweep plays once per hover / keyboard focus instead of looping forever on a visible button. */
+.x-donate:hover::after,
+.x-donate:focus-visible::after,
+.x-btn-gold:hover::after,
+.x-btn-gold:focus-visible::after { animation: m-sheen 1.5s var(--m-ease-soft) 1 both; }
 
 .x-donate:hover,
 .x-btn-gold:hover { box-shadow: 0 0 0 4px rgba(233, 184, 74, 0.2), 0 14px 26px -10px rgba(217, 160, 47, 0.8); }
@@ -431,7 +419,6 @@ textarea:focus {
   /* Symmetric stops so the tiled flow never shows a seam. */
   background: linear-gradient(90deg, var(--m-forest), #0e5545 25%, var(--m-teal) 50%, #0e5545 75%, var(--m-forest));
   background-size: 200% 100%;
-  animation: m-flow 14s linear infinite;
 }
 
 .x-nav-bar { transition: background-color var(--m-med) ease, box-shadow var(--m-med) var(--m-ease), transform var(--m-med) var(--m-ease), padding var(--m-med) var(--m-ease); }
@@ -459,7 +446,6 @@ body.urdu-mode .x-sheet-link:hover { transform: translate3d(-4px, 0, 0); }
   content: "";
   background: linear-gradient(90deg, transparent, var(--m-turquoise), var(--m-gold), var(--m-lime), transparent);
   background-size: 200% 100%;
-  animation: m-flow 14s linear infinite;
 }
 
 .x-footer-cols button,
@@ -473,7 +459,6 @@ body.urdu-mode .x-footer-cols button:hover { transform: translate3d(-5px, 0, 0);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: m-flow 18s linear infinite;
 }
 
 /* Dialogs and overlays: glass blur-in with a spring-free ease. */
@@ -498,7 +483,6 @@ body.urdu-mode .x-footer-cols button:hover { transform: translate3d(-5px, 0, 0);
   content: "";
   background: linear-gradient(90deg, var(--m-forest), var(--m-turquoise), var(--m-gold), var(--m-forest));
   background-size: 200% 100%;
-  animation: m-flow 10s linear infinite;
 }
 
 .auth-modal-form > * { animation: m-rise var(--m-med) var(--m-ease) both; }
@@ -518,12 +502,10 @@ body.urdu-mode .x-footer-cols button:hover { transform: translate3d(-5px, 0, 0);
 @media (max-width: 760px), (hover: none) {
   .x-hero::before,
   .x-hero::after { animation: none; filter: none; opacity: 0.8; }
-  .x-stage,
-  .x-hero-copy { transform: none; }
+  .x-stage { transform: none; }
   .x-donate::after,
   .x-btn-gold::after,
   .x-cta-band::before { animation: none; display: none; }
-  [data-rv="out"] { filter: none; }
   .x-tile:nth-child(odd):hover,
   .x-tile:nth-child(even):hover { transform: translate3d(0, -4px, 0); }
 }
@@ -539,8 +521,7 @@ body.urdu-mode .x-footer-cols button:hover { transform: translate3d(-5px, 0, 0);
     scroll-behavior: auto !important;
   }
 
-  [data-rv="out"] { opacity: 1; filter: none; transform: none; }
+  [data-rv="out"] { opacity: 1; transform: none; }
   .x-stage,
-  .x-hero-copy,
   .x-arch .village { transform: none; }
 }

@@ -1,5 +1,5 @@
 
-require("dotenv").config();
+require("../config/env");
 
 const readline = require("readline");
 const db = require("../config/db");

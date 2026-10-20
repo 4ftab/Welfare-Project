@@ -136,7 +136,7 @@ export default function App() {
   const go = useCallback((next) => {
     window.location.hash = `#/${next}`;
     setPage(next);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "instant" });
   }, []);
 
   /* ───────── auth modal ───────── */

@@ -26,56 +26,150 @@ const REVEAL_LEFT = ".x-welcome-copy, .x-section-head, .x-pagehead-lite, .x-news
 const REVEAL_RIGHT = ".x-news-item:nth-child(even), .x-welcome-actions";
 const REVEAL_SCALE = ".x-cta-band, .x-tile, .project-card, .stat-card";
 
+// Surfaces that carry perpetual decorative animation. They are paused (via [data-offscreen]) while off screen.
+const AMBIENT = ".x-hero, .ticker, .x-cta-band, .x-footer, .x-donate, .x-btn-gold";
+const MAGNETIC = "[data-magnetic]";
+const ALL = `${REVEAL},${AMBIENT},${MAGNETIC}`;
+
 const canHover = () => window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
 const prefersReducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+/** Static hints that the device cannot afford the richer ambient effects. */
+function looksLowPower() {
+  const nav = navigator;
+  return Boolean(
+    (nav.deviceMemory && nav.deviceMemory <= 2) ||
+      (nav.hardwareConcurrency && nav.hardwareConcurrency <= 2) ||
+      nav.connection?.saveData
+  );
+}
+
 /**
- * Page-wide ambient behaviours, all progressive enhancement:
- *  - scroll progress bar and a navbar that condenses once the page scrolls
- *  - cursor spotlight on cards, pointer parallax in the hero, magnetic buttons
- *  - staggered reveal-on-scroll (an IntersectionObserver; content is plain
- *    visible if it, or JavaScript, is unavailable)
+ * Measures real frame pacing shortly after load. A device that cannot hold ~36fps while idle gets the
+ * lite effects profile (html[data-perf="lite"]), regardless of its screen size.
+ */
+function watchFramePacing(root) {
+  let frame = 0;
+  let cancelled = false;
+
+  const timer = window.setTimeout(() => {
+    const deltas = [];
+    let last = 0;
+    const sample = (now) => {
+      if (cancelled || document.visibilityState !== "visible") return; // throttled tab: can't judge
+      if (last) deltas.push(now - last);
+      last = now;
+      if (deltas.length < 60) {
+        frame = requestAnimationFrame(sample);
+        return;
+      }
+      deltas.sort((a, b) => a - b);
+      if (deltas[deltas.length >> 1] > 28) root.dataset.perf = "lite";
+    };
+    frame = requestAnimationFrame(sample);
+  }, 2500);
+
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+    cancelAnimationFrame(frame);
+  };
+}
+
+/**
+ * Page-wide ambient behaviours, all progressive enhancement. One effect owns every listener and observer so
+ * nothing is duplicated and cleanup is in one place:
+ *  - scroll progress bar + condensed navbar (one passive, rAF-throttled scroll listener, no layout reads)
+ *  - cursor spotlight on cards, pointer parallax in the hero, magnetic buttons (only for on-screen targets)
+ *  - staggered reveal-on-scroll (IntersectionObserver; content is plain visible if it, or JS, is unavailable)
+ *  - pausing perpetual decorative animation while its surface is off screen
  */
 export function useAmbient() {
   useEffect(() => {
-    const bar = document.getElementById("scroll-progress");
-    let ticking = false;
+    const root = document.documentElement;
+    const reduced = prefersReducedMotion();
+    const fine = canHover();
 
-    const update = () => {
-      ticking = false;
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      if (bar) bar.style.transform = `scaleX(${max > 0 ? window.scrollY / max : 0})`;
-      document.querySelector(".x-nav")?.toggleAttribute("data-scrolled", window.scrollY > 24);
-      // Hero parallax value, only updated while the hero can still be on screen.
-      if (window.scrollY < window.innerHeight * 1.2 && !prefersReducedMotion()) {
-        document.querySelector(".x-hero")?.style.setProperty("--sy", String(Math.round(window.scrollY)));
+    if (looksLowPower()) root.dataset.perf = "lite";
+    const stopPacing = reduced ? () => {} : watchFramePacing(root);
+
+    /* ───────── scroll: progress bar + condensed nav ───────── */
+
+    const bar = document.getElementById("scroll-progress");
+    let nav = null;
+    let maxScroll = 0;
+    let scrolled = false;
+    let lastScale = -1;
+    let scrollFrame = 0;
+
+    const measure = () => {
+      maxScroll = root.scrollHeight - window.innerHeight;
+    };
+
+    const paintScroll = () => {
+      scrollFrame = 0;
+      const y = window.scrollY;
+      const scale = maxScroll > 0 ? Math.min(1, y / maxScroll) : 0;
+      if (bar && Math.abs(scale - lastScale) > 0.0005) {
+        lastScale = scale;
+        bar.style.transform = `scaleX(${scale})`;
+      }
+      const now = y > 24;
+      if (now !== scrolled) {
+        scrolled = now;
+        if (!nav?.isConnected) nav = document.querySelector(".x-nav");
+        nav?.toggleAttribute("data-scrolled", now);
       }
     };
 
     const onScroll = () => {
-      if (!ticking) {
-        ticking = true;
-        requestAnimationFrame(update);
-      }
+      if (!scrollFrame) scrollFrame = requestAnimationFrame(paintScroll);
     };
 
-    update();
+    const onResize = () => {
+      measure();
+      onScroll();
+    };
+
+    measure();
+    paintScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, []);
+    window.addEventListener("resize", onResize, { passive: true });
+    // Page height changes when content mounts or loads; re-measure then, never during scroll.
+    const sizeObserver = "ResizeObserver" in window ? new ResizeObserver(onResize) : null;
+    sizeObserver?.observe(document.body);
 
-  useEffect(() => {
-    const fine = canHover();
-    let frame = 0;
-    let event;
+    /* ───────── shared visibility bookkeeping ───────── */
 
-    const apply = () => {
-      frame = 0;
-      const { clientX: x, clientY: y, target } = event;
+    const visibleHero = new Set();
+    const visibleMagnetic = new Set();
+
+    // One observer decides whether ambient / magnetic surfaces are on screen.
+    const visibility = new IntersectionObserver(
+      (entries) => {
+        for (const { target: el, isIntersecting } of entries) {
+          if (el.matches(AMBIENT)) el.toggleAttribute("data-offscreen", !isIntersecting);
+          if (el.matches(".x-hero")) {
+            if (isIntersecting) visibleHero.add(el);
+            else visibleHero.delete(el);
+          }
+          if (el.matches(MAGNETIC)) {
+            if (isIntersecting) visibleMagnetic.add(el);
+            else visibleMagnetic.delete(el);
+          }
+        }
+      },
+      { rootMargin: "80px 0px" }
+    );
+
+    /* ───────── pointer: spotlight, hero parallax, magnetic buttons ───────── */
+
+    let pointerFrame = 0;
+    let pointer = null;
+
+    const applyPointer = () => {
+      pointerFrame = 0;
+      const { clientX: x, clientY: y, target } = pointer;
 
       const card = target.closest?.(".panel, .stat-card, .value, .impact-strip article");
       if (card) {
@@ -84,94 +178,125 @@ export function useAmbient() {
         card.style.setProperty("--my", `${y - rect.top}px`);
       }
 
-      if (!fine || prefersReducedMotion()) return;
+      if (!fine || reduced || root.dataset.perf === "lite") return;
 
-      const hero = document.querySelector(".x-hero");
-      if (hero) {
+      for (const hero of visibleHero) {
         const rect = hero.getBoundingClientRect();
         const inside = y > rect.top && y < rect.bottom;
-        hero.style.setProperty("--px", inside ? ((x - rect.left) / rect.width - 0.5).toFixed(3) : "0");
-        hero.style.setProperty("--py", inside ? ((y - rect.top) / rect.height - 0.5).toFixed(3) : "0");
+        const px = inside ? ((x - rect.left) / rect.width - 0.5).toFixed(2) : "0";
+        const py = inside ? ((y - rect.top) / rect.height - 0.5).toFixed(2) : "0";
+        if (hero.style.getPropertyValue("--px") !== px) hero.style.setProperty("--px", px);
+        if (hero.style.getPropertyValue("--py") !== py) hero.style.setProperty("--py", py);
       }
 
-      document.querySelectorAll("[data-magnetic]").forEach((el) => {
+      for (const el of visibleMagnetic) {
         const rect = el.getBoundingClientRect();
         const dx = x - (rect.left + rect.width / 2);
         const dy = y - (rect.top + rect.height / 2);
         const near = Math.hypot(dx, dy) < Math.max(rect.width, rect.height) * 0.9;
         el.style.setProperty("--tx", near ? `${(dx * 0.16).toFixed(1)}px` : "0px");
         el.style.setProperty("--ty", near ? `${(dy * 0.22).toFixed(1)}px` : "0px");
-      });
+      }
     };
 
     const onMove = (e) => {
-      event = e;
-      if (!frame) frame = requestAnimationFrame(apply);
+      pointer = e;
+      if (!pointerFrame) pointerFrame = requestAnimationFrame(applyPointer);
     };
 
     window.addEventListener("pointermove", onMove, { passive: true });
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      cancelAnimationFrame(frame);
-    };
-  }, []);
 
-  useEffect(() => {
-    if (!("IntersectionObserver" in window) || prefersReducedMotion()) return undefined;
+    /* ───────── reveal on scroll ───────── */
 
     const seen = new WeakSet();
-    const timers = new Set();
+    let reveal = null;
 
-    // Reveal slightly BEFORE an element scrolls into view (positive bottom margin), so fast scrolling
-    // never shows an empty gap. threshold 0 fires as soon as one pixel is inside the extended area.
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const el = entry.target;
-          io.unobserve(el);
-          el.dataset.rv = "in";
-          // Hand transitions back to the element's own hover styles once revealed.
-          const timer = setTimeout(() => {
-            delete el.dataset.rv;
-            timers.delete(timer);
-          }, 450);
-          timers.add(timer);
-        }
-      },
-      { threshold: 0, rootMargin: "0px 0px 35% 0px" }
-    );
+    if (!reduced && "IntersectionObserver" in window) {
+      // Reveal slightly BEFORE an element scrolls into view, so fast scrolling never shows an empty gap.
+      reveal = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            reveal.unobserve(entry.target);
+            entry.target.dataset.rv = "in";
+          }
+        },
+        { threshold: 0, rootMargin: "0px 0px 35% 0px" }
+      );
+    }
 
-    const register = (root) => {
-      const found = root.matches?.(REVEAL) ? [root, ...root.querySelectorAll(REVEAL)] : root.querySelectorAll?.(REVEAL) || [];
+    // Hand transitions back to an element's own hover styles once its reveal finishes (no per-element timers).
+    const onTransitionEnd = (e) => {
+      const el = e.target;
+      if (el.dataset?.rv === "in" && e.propertyName === "transform") delete el.dataset.rv;
+    };
+    document.addEventListener("transitionend", onTransitionEnd);
+
+    const register = (nodes) => {
+      const found = new Set();
+      for (const node of nodes) {
+        if (!node.isConnected) continue;
+        if (node.matches(ALL)) found.add(node);
+        node.querySelectorAll(ALL).forEach((el) => found.add(el));
+      }
+
+      const fresh = [...found].filter((el) => !seen.has(el));
+      if (!fresh.length) return;
+
+      // Read phase first: measure everything before writing anything (no forced reflow per element).
       const lowerEdge = window.innerHeight * 1.35;
+      const tops = fresh.map((el) => el.getBoundingClientRect().top);
 
-      for (const el of found) {
-        if (seen.has(el) || el.closest(".hero-x, .auth-modal, .toast-stack")) continue;
+      // Write phase.
+      fresh.forEach((el, i) => {
         seen.add(el);
+        if (el.matches(AMBIENT) || el.matches(MAGNETIC)) visibility.observe(el);
+        if (!reveal || !el.matches(REVEAL) || el.closest(".hero-x, .auth-modal, .toast-stack")) return;
+
         el.dataset.rvDir = el.matches(REVEAL_LEFT) ? "left" : el.matches(REVEAL_RIGHT) ? "right" : el.matches(REVEAL_SCALE) ? "scale" : "up";
         const index = el.parentElement ? Array.prototype.indexOf.call(el.parentElement.children, el) : 0;
         el.style.setProperty("--rv-i", String(Math.min(index, 6)));
         // Anything already on (or just below) the first screen is shown immediately, never hidden first.
-        if (el.getBoundingClientRect().top < lowerEdge) continue;
+        if (tops[i] < lowerEdge) return;
         el.dataset.rv = "out";
-        io.observe(el);
-      }
+        reveal.observe(el);
+      });
     };
 
-    register(document.body);
+    // Coalesce DOM mutations (a route change adds hundreds of nodes) into one scan per frame.
+    let pending = [];
+    let scanFrame = 0;
+    const flush = () => {
+      scanFrame = 0;
+      const nodes = pending;
+      pending = [];
+      register(nodes);
+    };
 
-    const mo = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        for (const node of m.addedNodes) if (node.nodeType === 1) register(node);
+    const host = document.getElementById("root") || document.body;
+    const mutations = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) if (node.nodeType === 1) pending.push(node);
       }
+      if (pending.length && !scanFrame) scanFrame = requestAnimationFrame(flush);
     });
-    mo.observe(document.body, { childList: true, subtree: true });
+    mutations.observe(host, { childList: true, subtree: true });
+
+    register([host]);
 
     return () => {
-      mo.disconnect();
-      io.disconnect();
-      timers.forEach(clearTimeout);
+      stopPacing();
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("pointermove", onMove);
+      document.removeEventListener("transitionend", onTransitionEnd);
+      cancelAnimationFrame(scrollFrame);
+      cancelAnimationFrame(pointerFrame);
+      cancelAnimationFrame(scanFrame);
+      sizeObserver?.disconnect();
+      mutations.disconnect();
+      visibility.disconnect();
+      reveal?.disconnect();
     };
   }, []);
 }

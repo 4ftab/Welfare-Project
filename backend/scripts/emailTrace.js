@@ -5,7 +5,7 @@
 //   npm run email-trace -- someone@gmail.com --days 1
 //
 // Needs BREVO_API_KEY in backend/.env. Times are UTC, the same clock as the [otp] log lines.
-require("dotenv").config({ quiet: true });
+require("../config/env");
 
 const { getEmailEvents, isConfigured } = require("../services/mailer");
 

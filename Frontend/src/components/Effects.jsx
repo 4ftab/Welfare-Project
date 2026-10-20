@@ -101,5 +101,5 @@ export function Confetti({ burst }) {
     return () => cancelAnimationFrame(frame);
   }, [burst]);
 
-  return <canvas ref={canvasRef} className="confetti" aria-hidden="true" />;
+  return <canvas ref={canvasRef} className="confetti" style={{ display: burst ? "block" : "none" }} aria-hidden="true" />;
 }

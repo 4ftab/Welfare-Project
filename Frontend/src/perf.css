@@ -1,0 +1,155 @@
+/* =========================================================
+   PERFORMANCE LAYER — loaded last. Keeps the emerald / teal / gold look, but removes the
+   effects that forced a repaint or a re-blur on every scroll frame.
+
+   1. Scroll cost       fixed backgrounds, blend modes
+   2. Glass surfaces    backdrop-filter only where it earns its cost
+   3. Perpetual motion  paused off screen, dropped on lite devices
+   4. Lite profile      html[data-perf="lite"] (set by useAmbient) + touch / small screens
+   ========================================================= */
+
+/* ───────────────────────── 1. Scroll cost ───────────────────────── */
+
+/* A fixed background forces the whole viewport to repaint on every scroll frame. Let it scroll with the page. */
+body { background-attachment: scroll; }
+
+/* The grain overlay is a full-viewport fixed layer: multiply-blending it re-composites the page each frame.
+   The grain is near-black at 7% opacity, so a plain low-opacity layer looks the same without the blend. */
+body::before {
+  mix-blend-mode: normal;
+  opacity: 0.045;
+}
+
+/* ───────────────────────── 2. Glass surfaces ───────────────────────── */
+
+/* Every card used to blur what is behind it (dozens of blur passes per frame). The cards are 78% opaque
+   already, so the backdrop blur was invisible; keep the tint, drop the blur. */
+.panel,
+.stat-card,
+.value,
+.impact-strip article,
+.x-t-donut,
+.x-app .x-project .art-glyph,
+.pill,
+.ticker,
+.table-wrap,
+.tabs,
+.x-app .x-tabs,
+.toast,
+.scene-tag,
+.hero-glass,
+.hero-ring-card,
+.x-float,
+.x-btn-glass,
+.x-place,
+.hero .button-ghost,
+.sidebar,
+.topbar {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Floating hero cards sit on a dark scene and bob forever; with no blur behind them, give them a denser tint. */
+/* .x-float { background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 250, 235, 0.78)); } */
+.hero-glass { background: linear-gradient(160deg, rgba(5, 47, 40, 0.84), rgba(5, 47, 40, 0.68)); }
+.hero-ring-card { background: linear-gradient(160deg, rgba(5, 47, 40, 0.88), rgba(5, 47, 40, 0.72)); }
+.scene-tag { background: rgba(3, 31, 26, 0.62); }
+.x-btn-glass { background: rgba(255, 255, 255, 0.18); }
+
+/* The sticky nav keeps its frosted glass (it is the signature surface) at a cheaper radius, no saturate pass. */
+.x-nav-bar {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(255, 250, 238, 0.7));
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.x-sheet {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.97), rgba(250, 244, 230, 0.95));
+}
+
+/* Modal backdrop already has a dark tint; a smaller blur is enough. */
+.auth-modal-overlay {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* Compositor-friendly hover: promote only the surfaces that actually move, and only while hovered. */
+.stat-card:hover,
+.project-card:hover,
+.announcement:hover,
+.x-tile:hover { will-change: transform; }
+
+/* ───────────────────────── 3. Perpetual motion ───────────────────────── */
+
+/* useAmbient flags ambient surfaces with [data-offscreen] while they are not visible. */
+[data-offscreen],
+[data-offscreen]::before,
+[data-offscreen]::after,
+[data-offscreen] *,
+[data-offscreen] *::before,
+[data-offscreen] *::after { animation-play-state: paused !important; }
+
+/* Skeleton shimmer animates background-position; use a calmer pulse that only changes opacity. */
+.skeleton-line { animation: p-pulse 1.4s ease-in-out infinite; background-position: 0 0; }
+@keyframes p-pulse { 50% { opacity: 0.55; } }
+
+/* Progress-bar sheen: a few passes when it appears, then it rests. */
+.progress-fill::after { animation-iteration-count: 3; }
+
+/* ───────────────────────── 4. Lite profile ───────────────────────── */
+
+/* Weak devices (little memory / few cores / data saver / measured slow frames) and touch screens:
+   same colours and layout, without perpetual decoration or glass blur. */
+html[data-perf="lite"] *,
+html[data-perf="lite"] *::before,
+html[data-perf="lite"] *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-perf="lite"] .x-hero::before,
+html[data-perf="lite"] .x-hero::after,
+html[data-perf="lite"] .x-float,
+html[data-perf="lite"] .hero-glass,
+html[data-perf="lite"] .hero-ring-card,
+html[data-perf="lite"] .win,
+html[data-perf="lite"] .fly,
+html[data-perf="lite"] .bird,
+html[data-perf="lite"] .trail,
+html[data-perf="lite"] .pulse::after,
+html[data-perf="lite"] .progress-fill::after,
+html[data-perf="lite"] .x-donate::after,
+html[data-perf="lite"] .x-btn-gold::after,
+html[data-perf="lite"] .x-cta-band::before { animation: none; }
+
+html[data-perf="lite"] .x-stage,
+html[data-perf="lite"] .x-arch .village,
+html[data-perf="lite"] .vl { transform: none; transition: none; }
+
+html[data-perf="lite"] .content { animation-duration: 0.18s; }
+html[data-perf="lite"] [data-rv] { transition-duration: 0.3s, 0.3s; }
+
+html[data-perf="lite"] .x-nav-bar { background: rgba(255, 255, 255, 0.94); }
+
+@media (hover: none), (max-width: 760px) {
+  .win,
+  .fly,
+  .bird,
+  .trail,
+  .x-float,
+  .hero-glass,
+  .hero-ring-card { animation: none; }
+
+  .x-nav-bar {
+    background: rgba(255, 255, 255, 0.94);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .auth-modal-overlay {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

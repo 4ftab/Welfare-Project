@@ -1,25 +1,26 @@
 // Idempotent, additive migration. Runs at server start, and by hand with:  npm run migrate
-require("dotenv").config();
+require("../config/env");
 
 const db = require("../config/db");
 
-async function columnExists(table, column) {
-  const [rows] = await db.execute(
-    `SELECT 1 FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
-    [table, column]
+// One round trip reads every column the checks below need. Each check used to be its own query, and against a
+// remote, TLS-protected database each query costs hundreds of milliseconds (about nine of them at every start).
+const CHECKED_TABLES = ["donations", "users", "payments"];
+let snapshot = new Map();
+
+async function loadSchema() {
+  const [rows] = await db.query(
+    `SELECT TABLE_NAME AS tableName, COLUMN_NAME AS columnName, COLUMN_TYPE AS columnType
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (?)`,
+    [CHECKED_TABLES]
   );
-  return rows.length > 0;
+
+  snapshot = new Map(rows.map((r) => [`${r.tableName}.${r.columnName}`, r.columnType]));
 }
 
-async function columnType(table, column) {
-  const [rows] = await db.execute(
-    `SELECT COLUMN_TYPE AS type FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
-    [table, column]
-  );
-  return rows[0]?.type || "";
-}
+const columnExists = async (table, column) => snapshot.has(`${table}.${column}`);
+const columnType = async (table, column) => snapshot.get(`${table}.${column}`) || "";
 
 const PAYMENT_STATUSES = "'pending','completed','failed','refunded','cancelled','expired'";
 
@@ -35,6 +36,8 @@ async function migrate() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
   console.log("contact_messages: ok");
+
+  await loadSchema();
 
   if (!(await columnExists("donations", "project_id"))) {
     await db.query(`

@@ -1,5 +1,5 @@
 // Checks the Brevo configuration and sends one test email:  npm run test-email -- you@example.com
-require("dotenv").config();
+require("../config/env");
 
 const { checkConfig, sendMail, sender } = require("../services/mailer");
 

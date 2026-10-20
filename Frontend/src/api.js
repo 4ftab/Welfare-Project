@@ -16,7 +16,9 @@ async function send(path, { token, timeout = TIMEOUT_MS, ...options }) {
       ...options,
       signal: controller.signal,
       headers: {
-        "Content-Type": "application/json",
+        // Only requests that carry a body declare a content type. Sending it on every GET made the browser
+        // issue a CORS preflight (an extra OPTIONS round trip) before each public API call.
+        ...(options?.body ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options?.headers,
       },
